@@ -22,18 +22,6 @@ TUI download manager for YouTube (and 1000+ sites) via **yt-dlp** + **ffmpeg**.
 - **Real pause & resume** — suspends the whole yt-dlp process group (POSIX)
 - **Dark theme** with teal accent
 
-## Demo
-
-<p align="center">
-  <a href="assets/Demo_yoinkTUI.mp4">
-    <img src="assets/Demo_thumbnail.png" alt="YoinkTUI demo — click to play" width="100%">
-  </a>
-  <br>
-  <a href="assets/Demo_yoinkTUI.mp4"><b>▶ Watch the 48-second demo</b></a>
-</p>
-
-*(GitHub doesn't play repo-local MP4s inline, so the thumbnail links to the video.)*
-
 ## Screenshots
 
 <p align="center">
