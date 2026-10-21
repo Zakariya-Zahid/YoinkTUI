@@ -10,14 +10,16 @@ containers, presets/profiles, defaults, and precedence rules.
 
 ## 2. Current state
 
-- `AppConfig` is a dataclass with a single field (`download_dir`) and is declared
-  as a **class attribute**, so it is shared across instances.
+- `AppConfig` is a per-instance `slots` dataclass (no shared mutable class
+  default) with `download_dir`, `cookies_from_browser`, `proxy`, and
+  `extra_args`.
+- CLI already supports `--download-dir`, `--cookies-from-browser`, `--proxy`,
+  and repeatable `--yt-dlp-arg` overrides; these are passed to both probe and
+  download.
 - Download dir default: `~/Videos/yoinktui/`.
 - Quality cap (`1080`), merge container (`mkv`), and audio format (`mp3`) are
-  **hardcoded** in `FormatScreen._start_download` / engine defaults.
-- README claims the cap is "configurable via yt-dlp config", but the engine passes
-  `--ignore-config`, so that advice does not work today.
-- No config file, no env vars, no profiles.
+  still **hardcoded** in `FormatScreen._start_download` / engine defaults.
+- No TOML config file or env-var overrides yet.
 
 ## 3. Goals
 
@@ -31,7 +33,7 @@ containers, presets/profiles, defaults, and precedence rules.
 ## 4. Workstreams
 
 ### WS 07.1 — Config object — **[P0]**
-- [ ] Make `AppConfig` a per-instance object (no shared mutable class default).
+- [x] Make `AppConfig` a per-instance object (no shared mutable class default).
 - [ ] Define the full schema: see below.
 - [ ] Path resolution respecting `XDG_CONFIG_HOME` / `XDG_DATA_HOME`.
 

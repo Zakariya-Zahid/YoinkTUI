@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PIL import Image as PILImage
+from rich.markup import escape
 from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
@@ -144,22 +145,25 @@ class UrlScreen(Screen):
         status = self.query_one("#probe-status", Static)
         status.add_class("hidden")
         if error:
-            status.update(f"[red]✗[/red] {error}")
+            status.update(f"[red]✗[/red] {escape(error)}")
             status.remove_class("hidden")
             # Auto-hide error after 3 seconds
             self.set_timer(3.0, lambda: status.add_class("hidden"))
 
     @work(thread=True, exclusive=True, name="probe")
     def _run_probe(self, url: str) -> None:
-        try:
-            info = probe(url)
-            self.app.call_from_thread(self._on_probed, info, None)
-        except BackendError as e:
-            self.app.call_from_thread(self._on_probed, None, str(e))
-        except Exception as e:
-            self.app.call_from_thread(self._on_probed, None, str(e))
+        from yoinktui.app import AppConfig
 
-    def _on_probed(self, info: MediaInfo | None, error: str | None) -> None:
+        config = getattr(self.app, "config", AppConfig())
+        try:
+            info = probe(url, extra_args=config.ytdlp_args)
+            self.app.call_from_thread(self._on_probed, info, None, url)
+        except BackendError as e:
+            self.app.call_from_thread(self._on_probed, None, str(e), url)
+        except Exception as e:
+            self.app.call_from_thread(self._on_probed, None, str(e), url)
+
+    def _on_probed(self, info: MediaInfo | None, error: str | None, url: str) -> None:
         if error:
             self._hide_probe_status(error)
             self.app.push_screen(ErrorModal(error))
@@ -330,6 +334,7 @@ class FormatScreen(Screen):
             out_template=out_template,
             extract_audio=extract_audio,
             title=self.info.title or "video",
+            extra_args=config.ytdlp_args,
         ))
 
     def action_back(self) -> None:
@@ -357,6 +362,7 @@ class DownloadScreen(Screen):
         out_template: str,
         extract_audio: bool,
         title: str,
+        extra_args: list[str] | None = None,
     ) -> None:
         super().__init__()
         self.url = url
@@ -364,6 +370,7 @@ class DownloadScreen(Screen):
         self.out_template = out_template
         self.extract_audio = extract_audio
         self.title = title
+        self.extra_args = list(extra_args or [])
 
         self._control = DownloadControl()
         self._cancelled = False
@@ -430,6 +437,7 @@ class DownloadScreen(Screen):
                 selector=self.selector,
                 out_template=self.out_template,
                 extract_audio=self.extract_audio,
+                extra_args=self.extra_args,
                 control=self._control,
             ):
                 self.app.call_from_thread(self._handle_event, event)
@@ -587,7 +595,7 @@ class ErrorModal(ModalScreen):
     def compose(self) -> ComposeResult:
         with Container(classes="dialog"):
             yield Static("✗ Error", classes="title")
-            yield Static(self.message, classes="message")
+            yield Static(self.message, classes="message", markup=False)
             yield Button("Dismiss", variant="error", id="dismiss")
 
     @on(Button.Pressed, "#dismiss")

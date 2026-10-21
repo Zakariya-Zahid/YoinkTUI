@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from textual.app import App, ComposeResult
@@ -11,9 +11,23 @@ from textual.binding import Binding
 from yoinktui.tui.screens import UrlScreen
 
 
-@dataclass
+@dataclass(slots=True)
 class AppConfig:
-    download_dir: Path = Path.home() / "Videos" / "yoinktui"
+    download_dir: Path = field(default_factory=lambda: Path.home() / "Videos" / "yoinktui")
+    cookies_from_browser: str | None = None
+    proxy: str | None = None
+    extra_args: tuple[str, ...] = ()
+
+    @property
+    def ytdlp_args(self) -> list[str]:
+        """Extra yt-dlp flags shared by probe and download."""
+        args: list[str] = []
+        if self.cookies_from_browser:
+            args += ["--cookies-from-browser", self.cookies_from_browser]
+        if self.proxy:
+            args += ["--proxy", self.proxy]
+        args += list(self.extra_args)
+        return args
 
 
 class YoinkTUIApp(App):
@@ -27,10 +41,11 @@ class YoinkTUIApp(App):
         Binding("ctrl+d", "toggle_dark", "Toggle theme", show=True),
     ]
 
-    config: AppConfig = AppConfig()
+    config: AppConfig
 
-    def __init__(self) -> None:
+    def __init__(self, config: AppConfig | None = None) -> None:
         super().__init__()
+        self.config = config or AppConfig()
         self.config.download_dir.mkdir(parents=True, exist_ok=True)
 
     def on_mount(self) -> None:

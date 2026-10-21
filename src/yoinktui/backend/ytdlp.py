@@ -26,6 +26,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from yoinktui.backend.models import MediaInfo
 
@@ -146,7 +147,27 @@ def tool_available(tool: str) -> bool:
     return shutil.which(tool) is not None
 
 
-def probe(url: str) -> MediaInfo:
+def _friendly_error(url: str, message: str) -> str:
+    """Append a useful hint to common site-side blocks."""
+    if "403" not in message:
+        return message
+
+    host = (urlparse(url).hostname or "").lower()
+    if "tiktok" in host:
+        hint = (
+            "TikTok blocked this request (HTTP 403). This is TikTok's anti-bot "
+            "protection, not a YoinkTUI limit. Log into TikTok in your browser and "
+            "launch with --cookies-from-browser, or try a VPN/proxy."
+        )
+    else:
+        hint = (
+            "The site blocked this request (HTTP 403). Cookies or a different "
+            "network may help."
+        )
+    return f"{message}\n\n{hint}"
+
+
+def probe(url: str, extra_args: list[str] | None = None) -> MediaInfo:
     """Fetch metadata + format list without downloading anything."""
     cmd = [
         "yt-dlp",
@@ -155,6 +176,7 @@ def probe(url: str) -> MediaInfo:
         "--no-warnings",
         "--ignore-config",
         "--socket-timeout", "20",
+        *(extra_args or []),
         url,
     ]
     try:
@@ -165,7 +187,8 @@ def probe(url: str) -> MediaInfo:
         raise BackendError("Timed out while contacting the site") from exc
 
     if proc.returncode != 0:
-        raise BackendError(_extract_error(proc.stderr) or "Could not read that URL")
+        message = _extract_error(proc.stderr) or "Could not read that URL"
+        raise BackendError(_friendly_error(url, message))
 
     import json
 
@@ -382,7 +405,9 @@ def download(
 
     if proc.returncode not in (0, None) and not finished_path:
         message = _extract_error("\n".join(stderr_lines))
-        raise BackendError(message or f"yt-dlp exited with code {proc.returncode}")
+        raise BackendError(
+            _friendly_error(url, message or f"yt-dlp exited with code {proc.returncode}")
+        )
 
     if finished_path:
         yield ProgressEvent(kind="done", filename=finished_path)

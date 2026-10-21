@@ -71,12 +71,34 @@ yoinktui
 
 ## Configuration
 
-Download directory: `~/Videos/yoinktui/`
+Download directory: `~/Videos/yoinktui/` (override with `--download-dir DIR`).
 
 Quality cap, container, and audio format are currently built-in defaults
 (1080p, `mkv`, `mp3`). A `config.toml` with profiles is planned — see
 [module 07](docs/plans/07-configuration-profiles.md) and the
 [roadmap](ROADMAP.md).
+
+### Cookies and proxy
+
+Some sites need a logged-in browser session or a different network:
+
+```bash
+yoinktui --cookies-from-browser firefox
+yoinktui --cookies-from-browser "firefox:/path/to/profile" \
+  --proxy socks5://127.0.0.1:1080
+```
+
+Use the same browser names as yt-dlp: `chrome`, `firefox`, `edge`, `brave`,
+or `browser:profile`. Extra yt-dlp flags can be passed with
+`--yt-dlp-arg=...` (repeatable).
+
+### TikTok / HTTP 403
+
+TikTok's anti-bot layer sometimes rejects yt-dlp with
+`HTTP Error 403: Forbidden` before it can read the video. That is a
+TikTok-side block, not a YoinkTUI site limit. Log into TikTok in your
+browser and use `--cookies-from-browser`, or try a VPN/proxy. The same URL
+may work later without changes.
 
 ## Keyboard Shortcuts
 
