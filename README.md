@@ -22,6 +22,11 @@ TUI download manager for YouTube (and 1000+ sites) via **yt-dlp** + **ffmpeg**.
 - **Real pause & resume** — suspends the whole yt-dlp process group (POSIX)
 - **Dark theme** with teal accent
 
+## Live Demo
+<p align="center">
+  <a href="https://github.com/user-attachments/assets/4d92a270-7695-44be-a0ad-ab9ccb74ca62">Watch the Demo</a>
+</p>
+
 ## Screenshots
 
 <p align="center">
