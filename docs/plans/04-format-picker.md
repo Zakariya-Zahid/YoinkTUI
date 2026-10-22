@@ -15,6 +15,7 @@ available formats, and letting the user pick one confidently.
 - `ThumbnailCard`: `textual-image` `AutoImage` with animated `▶ LOADING`
   placeholder and `-error` state; fetches via `httpx`.
 - Selection is single-row; mode buttons live on `FormatScreen` (module 05).
+- `ClipModal` provides optional start/end timestamps with presets and validation.
 - Local `FormatTable._human_size` duplicates `widgets.human_size`.
 
 ## 3. Goals

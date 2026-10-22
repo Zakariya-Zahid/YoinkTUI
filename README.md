@@ -14,6 +14,7 @@ TUI download manager for YouTube (and 1000+ sites) via **yt-dlp** + **ffmpeg**.
 ## Features
 
 - **Paste URL → See formats → Download** — clean three-screen flow
+- **Clip downloads** — pick a start/end range to grab just the useful part of a long podcast or tutorial
 - **Steam-style download manager** — per-stream queue, live speed/ETA/peak/disk tiles,
   overall progress, pause/resume, cancel, and a timestamped activity log
 - **Live thumbnail** — renders via kitty graphics / sixel / Unicode fallback (`textual-image`)
@@ -67,7 +68,8 @@ yoinktui
 1. **Paste a URL** — YouTube, Twitter/X, Vimeo, Twitch, TikTok, etc.
 2. **Pick a format** — Table shows video & audio streams; arrow keys navigate, Enter selects
 3. **Choose mode** — `Video+Audio` (default), `Video Only`, `Audio Only`
-4. **Download** — Steam-style dashboard with queue, stats, and activity log
+4. **Optional clip** — press `C`, enter a start/end range, then Apply. Leave end blank to go to the end of the video.
+5. **Download** — Steam-style dashboard with queue, stats, and activity log
 
 ## Configuration
 
@@ -106,6 +108,7 @@ may work later without changes.
 |-----|--------|
 | `Enter` | Submit URL / Select format |
 | `↑/↓` | Navigate format table |
+| `C` | Set a clip start/end range |
 | `Esc` | Back / Cancel download |
 | `P` / `Space` | Pause / resume download |
 | `Ctrl+Q` | Quit app |

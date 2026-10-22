@@ -18,10 +18,14 @@ the progress stream alive.
 from __future__ import annotations
 
 import os
+import queue
+import re
 import shutil
 import signal
 import subprocess
 import threading
+import time
+from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,6 +64,176 @@ class ProgressEvent:
     section: str = ""
     # log / error
     text: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class Section:
+    """A time range (in seconds) to download from a longer video.
+
+    ``end=None`` means "until the end of the video". ``precise`` asks yt-dlp
+    to re-encode around the cut points so the output starts/ends exactly on
+    the requested timestamps instead of the nearest keyframe.
+    """
+
+    start: float = 0.0
+    end: float | None = None
+    precise: bool = False
+
+
+_CLOCK_HMS = re.compile(r"^(\d+):([0-5]?\d):([0-5]?\d)$")
+_CLOCK_MS = re.compile(r"^(\d+):([0-5]?\d)$")
+_SECONDS = re.compile(r"^\d+(?:\.\d+)?$")
+_UNITS = re.compile(r"^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$", re.IGNORECASE)
+
+
+def parse_timecode(value: str) -> float:
+    """Parse a user-entered timestamp into seconds.
+
+    Accepts ``HH:MM:SS``, ``MM:SS``, plain seconds (``90``), and compact
+    units (``1h2m3s``). Raises ``ValueError`` with a friendly message.
+    """
+    text = value.strip()
+    if not text:
+        raise ValueError("Enter a time like 00:05:00")
+
+    match = _CLOCK_HMS.fullmatch(text)
+    if match:
+        hours, minutes, seconds = (int(part) for part in match.groups())
+        return hours * 3600 + minutes * 60 + seconds
+
+    match = _CLOCK_MS.fullmatch(text)
+    if match:
+        minutes, seconds = (int(part) for part in match.groups())
+        return minutes * 60 + seconds
+
+    if _SECONDS.fullmatch(text):
+        return float(text)
+
+    match = _UNITS.fullmatch(text)
+    if match and any(match.groups()):
+        hours, minutes, seconds = (int(part or 0) for part in match.groups())
+        return hours * 3600 + minutes * 60 + seconds
+
+    raise ValueError("Use HH:MM:SS, MM:SS, seconds, or 1h2m3s")
+
+
+def format_timecode(seconds: float | None, *, force_hours: bool = False) -> str:
+    """Format seconds for the UI (``05:30`` or ``1:05:30``)."""
+    if seconds is None:
+        return "—"
+    total = max(0, int(round(seconds)))
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours or force_hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+
+def _section_time(seconds: float) -> str:
+    """Always-hour (zero-padded) format for yt-dlp section specs and filenames."""
+    total = max(0, int(round(seconds)))
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def section_spec(section: Section) -> str:
+    """Build the yt-dlp ``--download-sections`` value for a section."""
+    if section.start < 0:
+        raise ValueError("Start time cannot be negative")
+    if section.end is not None and section.end <= section.start:
+        raise ValueError("End time must be after start time")
+    end = "" if section.end is None else _section_time(section.end)
+    return f"*{_section_time(section.start)}-{end}"
+
+
+def section_slug(section: Section) -> str:
+    """A filesystem-friendly suffix identifying a section."""
+    start = _section_time(section.start).replace(":", "-")
+    end = "end" if section.end is None else _section_time(section.end).replace(":", "-")
+    return f"{start}_{end}"
+
+
+class _FileProgressMonitor:
+    """Estimate live progress from the growing output file.
+
+    yt-dlp's ``--download-sections`` path (which often hands the transfer to
+    ffmpeg) does not emit the normal progress hooks until the section is
+    complete. The output ``.part`` file still grows, so we can sample its size
+    and derive speed/ETA for the dashboard.
+    """
+
+    def __init__(self, out_template: str, expected_bytes: float | None = None) -> None:
+        self._expected = expected_bytes if expected_bytes and expected_bytes > 0 else None
+        path = Path(out_template)
+        self._parent = path.parent
+        name = path.name
+        # app templates end in "title.%(ext)s"; avoid patterns with other placeholders
+        if "%(ext)s" in name:
+            prefix = name.split("%(ext)s", 1)[0]
+            self._prefix = prefix if prefix and "%(" not in prefix else None
+        else:
+            self._prefix = None
+        self._started = time.time()
+        self._last_emit = 0.0
+        self._samples: deque[tuple[float, float]] = deque()
+
+    def _size(self) -> float:
+        if self._prefix is None:
+            return 0.0
+        total = 0.0
+        try:
+            candidates = self._parent.iterdir()
+        except OSError:
+            return 0.0
+        for candidate in candidates:
+            if not candidate.name.startswith(self._prefix):
+                continue
+            try:
+                if not candidate.is_file():
+                    continue
+                stat = candidate.stat()
+            except OSError:
+                continue
+            if candidate.name.endswith(".ytdl"):
+                continue
+            # Ignore old completed files from an earlier run. An active
+            # .part is included even if its mtime predates this download.
+            if stat.st_mtime < self._started - 2 and not candidate.name.endswith(".part"):
+                continue
+            total += stat.st_size
+        return total
+
+    def poll(self) -> ProgressEvent | None:
+        now = time.monotonic()
+        if now - self._last_emit < 0.45:
+            return None
+        size = self._size()
+        if size <= 0:
+            return None
+
+        self._samples.append((now, size))
+        while len(self._samples) > 2 and now - self._samples[0][0] > 8.0:
+            self._samples.popleft()
+        self._last_emit = now
+        if len(self._samples) < 2:
+            return None
+
+        first_time, first_size = self._samples[0]
+        elapsed = now - first_time
+        if elapsed <= 0:
+            return None
+        speed = max(0.0, (size - first_size) / elapsed)
+        total = self._expected
+        eta = (total - size) / speed if total and speed > 0 and total > size else None
+        return ProgressEvent(
+            kind="download",
+            status="downloading",
+            downloaded=size,
+            total=total,
+            speed=speed or None,
+            eta=eta,
+        )
 
 
 class DownloadControl:
@@ -249,6 +423,7 @@ def _build_cmd(
     audio_quality: str,
     merge_format: str,
     extra_args: list[str],
+    section: Section | None = None,
 ) -> list[str]:
     cmd = [
         "yt-dlp",
@@ -264,6 +439,10 @@ def _build_cmd(
         "--progress-template", PP_TEMPLATE,
         "--print", "after_move:FINAL|%(filepath)s",
     ]
+    if section is not None:
+        cmd += ["--download-sections", section_spec(section)]
+        if section.precise:
+            cmd += ["--force-keyframes-at-cuts"]
     if merge_format:
         cmd += ["--merge-output-format", merge_format]
     if extract_audio:
@@ -319,13 +498,18 @@ def download(
     audio_quality: str = "0",
     merge_format: str = "mkv",
     extra_args: list[str] | None = None,
+    section: Section | None = None,
+    expected_bytes: float | None = None,
     cancel_check=None,
     control: DownloadControl | None = None,
 ) -> Iterator[ProgressEvent]:
     """Yield :class:`ProgressEvent`s while yt-dlp runs.
 
-    ``cancel_check`` is polled once per output line; returning True aborts.
+    ``cancel_check`` is polled periodically; returning True aborts.
     ``control`` offers thread-safe pause/resume/cancel from another thread.
+    ``section`` limits the download to a start/end time range.
+    ``expected_bytes`` is a size estimate for section downloads, whose
+    downloader does not report live progress itself.
     """
     cmd = _build_cmd(
         url,
@@ -336,6 +520,7 @@ def download(
         audio_quality=audio_quality,
         merge_format=merge_format,
         extra_args=list(extra_args or []),
+        section=section,
     )
 
     try:
@@ -353,6 +538,24 @@ def download(
     if control is not None:
         control.attach(proc)
 
+    monitor = (
+        _FileProgressMonitor(out_template, expected_bytes)
+        if section is not None
+        else None
+    )
+
+    # Drain stdout on its own thread so the main loop can sample the output
+    # file while a section download is running (yt-dlp is quiet during those).
+    stdout_queue: queue.Queue[str | None] = queue.Queue()
+
+    def _drain_stdout() -> None:
+        assert proc.stdout is not None
+        try:
+            for out_line in proc.stdout:
+                stdout_queue.put(out_line)
+        finally:
+            stdout_queue.put(None)
+
     # Drain stderr on its own thread so a chatty warning can't deadlock us.
     stderr_lines: list[str] = []
 
@@ -362,38 +565,68 @@ def download(
             stderr_lines.append(err_line.rstrip())
         # Closing here unblocks wait() once stdout is exhausted.
 
-    t = threading.Thread(target=_drain_stderr, daemon=True)
-    t.start()
+    stdout_thread = threading.Thread(target=_drain_stdout, daemon=True)
+    stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
 
     def _is_cancelled() -> bool:
         if control is not None and control.cancelled:
             return True
         return bool(cancel_check is not None and cancel_check())
 
+    def _terminate() -> None:
+        if control is not None:
+            control.resume()
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
     assert proc.stdout is not None
     finished_path = ""
     try:
-        for raw_line in proc.stdout:
+        while True:
             if _is_cancelled():
-                if control is not None:
-                    control.resume()
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
+                _terminate()
                 yield ProgressEvent(kind="error", text="Cancelled")
                 return
+
+            try:
+                raw_line = stdout_queue.get(timeout=0.5)
+            except queue.Empty:
+                if monitor is not None:
+                    progress = monitor.poll()
+                    if progress is not None:
+                        yield progress
+                continue
+
+            if raw_line is None:
+                break
 
             line = raw_line.rstrip("\n")
             event = _parse_line(line)
             if event is None:
+                if monitor is not None:
+                    progress = monitor.poll()
+                    if progress is not None:
+                        yield progress
                 continue
             if event.kind == "done" and event.filename:
                 finished_path = event.filename
+            if event.kind in ("done", "error") or (
+                event.kind == "download" and event.status == "finished"
+            ):
+                monitor = None
             yield event
+            if monitor is not None:
+                progress = monitor.poll()
+                if progress is not None:
+                    yield progress
     finally:
-        t.join(timeout=5)
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
         if proc.poll() is None:
             proc.kill()
         if control is not None:

@@ -120,7 +120,7 @@ FormatTable > .datatable--odd-row {
     color: $text;
 }
 
-ActionBar {
+.ActionBar {
     height: auto;
     width: 100%;
     layout: horizontal;
@@ -128,8 +128,9 @@ ActionBar {
     padding: 0 1;
 }
 
-ActionBar Button {
+.ActionBar Button {
     width: auto;
+    min-width: 10;
     margin: 0 1 0 0;
 }
 
@@ -367,6 +368,89 @@ ErrorModal .dialog {
 ErrorModal .message {
     margin-bottom: 1;
     color: $text;
+}
+
+/* ClipModal — optional start/end range */
+ClipModal {
+    align: center middle;
+}
+ClipModal .dialog {
+    width: 76;
+    max-width: 92%;
+    height: auto;
+    max-height: 96%;
+    background: $surface-raised;
+    border: thick $accent;
+    padding: 1 3;
+    overflow-y: auto;
+}
+ClipModal .title {
+    color: $accent;
+    text-style: bold;
+}
+ClipModal .clip-hint {
+    color: $text-muted;
+    height: 1;
+}
+ClipModal .clip-row {
+    layout: horizontal;
+    height: 4;
+}
+ClipModal .clip-field {
+    width: 1fr;
+    height: 4;
+    layout: vertical;
+    margin-right: 2;
+}
+ClipModal .clip-label {
+    color: $text-muted;
+    height: 1;
+}
+ClipModal Input {
+    height: 3;
+    border: tall $border;
+    background: $surface;
+    color: $text;
+    padding: 0 1;
+}
+ClipModal Input:focus {
+    border: tall $border-focus;
+}
+ClipModal .clip-presets {
+    layout: horizontal;
+    height: 3;
+}
+ClipModal .clip-presets Button {
+    width: auto;
+    min-width: 10;
+    margin-right: 1;
+}
+ClipModal .clip-precise {
+    layout: horizontal;
+    height: 1;
+    align: left middle;
+}
+ClipModal Switch {
+    width: 8;
+    height: 1;
+}
+ClipModal .clip-precise .clip-hint {
+    margin-left: 1;
+    content-align: left middle;
+}
+ClipModal .clip-error {
+    color: $error;
+    height: 1;
+}
+ClipModal .clip-actions {
+    layout: horizontal;
+    height: 3;
+    align: right middle;
+}
+ClipModal .clip-actions Button {
+    width: auto;
+    min-width: 10;
+    margin-left: 2;
 }
 
 /* StatusToast */

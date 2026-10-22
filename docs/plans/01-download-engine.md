@@ -17,6 +17,10 @@ without any TUI.
 - `DownloadControl` implements real pause/resume/cancel via POSIX
   `SIGSTOP`/`SIGCONT`/`SIGTERM` on the process group (`start_new_session=True`).
 - Format helpers `video_selector()` / `audio_selector()` build `-f` expressions.
+- `Section` + `parse_timecode()` support clip downloads via
+  `--download-sections` and optional `--force-keyframes-at-cuts`.
+- Section downloads use a file-size progress fallback because yt-dlp's
+  range downloader does not emit normal live progress hooks.
 - `tool_available()` exists but is **never called**.
 - Always `--ignore-config`, `--no-playlist`; container `mkv` and audio `mp3`
   are **hardcoded**; 1080p cap hardcoded in `FormatScreen._start_download`.

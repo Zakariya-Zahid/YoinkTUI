@@ -494,13 +494,15 @@ class DownloadDashboard(Container):
         title: str,
         extract_audio: bool = False,
         disk_free: str = "—",
+        single_pass: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self._title = title or "Untitled"
         self._extract_audio = extract_audio
         self._disk_free = disk_free
-        self._passes = 1 if extract_audio else 2
+        self._single_pass = single_pass
+        self._passes = 1 if (extract_audio or single_pass) else 2
         self._peak = 0.0
         self._status_text = "● CONNECTING"
 
@@ -513,7 +515,9 @@ class DownloadDashboard(Container):
             yield Static("● CONNECTING", classes="dl-status downloading")
         yield Static("Preparing download…", classes="dl-phase")
         with Vertical(classes="dl-queue"):
-            if self._extract_audio:
+            if self._single_pass:
+                yield DownloadQueueItem("✂", "Clip stream", id="q-clip")
+            elif self._extract_audio:
                 yield DownloadQueueItem("🎵", "Audio stream", id="q-audio")
             else:
                 yield DownloadQueueItem("▶", "Video stream", id="q-video")
@@ -614,8 +618,11 @@ class DownloadDashboard(Container):
         self.query_one("#stat-eta", StatTile).set_value(human_time(eta))
         self.query_one("#stat-peak", StatTile).set_value(human_speed(self._peak))
         total_text = human_size(total) if total else "?"
+        progress_label = (
+            "Clip" if self._single_pass else f"Stream {pass_num + 1} of {self._passes}"
+        )
         self.query_one(".dl-bytes", Static).update(
-            f"Stream {pass_num + 1} of {self._passes}   "
+            f"{progress_label}   "
             f"[bold]{human_size(downloaded)}[/bold] / {total_text}   "
             f"[dim]overall {overall * 100:.0f}%[/dim]"
         )
