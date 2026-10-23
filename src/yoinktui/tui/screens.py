@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import io
 import shutil
 import time
@@ -9,6 +10,7 @@ from dataclasses import dataclass
 from importlib.resources import files as resource_files
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 from PIL import Image as PILImage
 from rich.markup import escape
@@ -16,12 +18,15 @@ from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen, Screen
+from textual.timer import Timer
 from textual.widgets import Button, Footer, Header, Input, Static, Switch
 from textual_image.widget import AutoImage
 
+from yoinktui.backend.config import AppConfig, load_last_url, save_last_url
+from yoinktui.backend.errors import DownloadError
 from yoinktui.backend.models import FormatInfo, MediaInfo
 from yoinktui.backend.ytdlp import (
-    BackendError,
+    DependencyReport,
     DownloadControl,
     ProgressEvent,
     Section,
@@ -30,6 +35,7 @@ from yoinktui.backend.ytdlp import (
     format_timecode,
     parse_timecode,
     probe,
+    resolve_merge_format,
     section_slug,
     video_selector,
 )
@@ -37,7 +43,6 @@ from yoinktui.tui.widgets import (
     DownloadDashboard,
     FormatTable,
     InfoPanel,
-    ModalDialog,
     StatusToast,
     ThumbnailCard,
     UrlInput,
@@ -46,7 +51,7 @@ from yoinktui.tui.widgets import (
 )
 
 if TYPE_CHECKING:
-    from yoinktui.app import YoinkTUIApp
+    pass
 
 
 _BANNER = (
@@ -77,6 +82,19 @@ def _brand_logo() -> AutoImage:
     )
 
 
+def clean_url(value: str) -> str:
+    """Trim pasted text and reject obviously invalid URLs before probing."""
+    url = value.strip().strip("<>\"'")
+    if not url:
+        raise ValueError("Paste a URL first.")
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("URL must start with http:// or https://")
+    if not parsed.netloc:
+        raise ValueError("That doesn't look like a complete URL.")
+    return url
+
+
 class UrlScreen(Screen):
     """First screen: enter a URL, press Enter to probe."""
 
@@ -85,13 +103,24 @@ class UrlScreen(Screen):
         ("ctrl+c", "quit", "Quit"),
     ]
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._probing = False
+        self._pushed = False
+        self._cancel_probe = False
+        self._spinner_timer: Timer | None = None
+
     def compose(self) -> ComposeResult:
+        config = getattr(self.app, "config", None)
         with Container(classes="center-box"):
             with Container(classes="logo-wrap"):
-                try:
-                    yield _brand_logo()
-                except (OSError, ModuleNotFoundError):
+                if config is not None and config.ascii:
                     yield Static(_BANNER, classes="title", markup=True)
+                else:
+                    try:
+                        yield _brand_logo()
+                    except (OSError, ModuleNotFoundError):
+                        yield Static(_BANNER, classes="title", markup=True)
             yield Static(
                 "[dim]Powered by yt-dlp  •  1000+ supported sites[/dim]",
                 classes="version",
@@ -104,8 +133,34 @@ class UrlScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        last_url = getattr(getattr(self.app, "state", None), "last_url", "") or load_last_url()
+        if last_url:
+            self.query_one("#url", UrlInput).value = last_url
         self._fit_brand()
         self.query_one("#url", UrlInput).focus()
+
+    def on_screen_resume(self) -> None:
+        """Re-enable the input when a pushed screen pops back."""
+        self._probing = False
+        self._pushed = False
+        self._cancel_probe = False
+        with contextlib.suppress(Exception):
+            url_input = self.query_one("#url", UrlInput)
+            url_input.disabled = False
+            url_input.focus()
+
+    def cancel_work(self) -> None:
+        """Stop an in-flight probe so quitting never leaves yt-dlp behind."""
+        self._cancel_probe = True
+        if self._spinner_timer is not None:
+            self._spinner_timer.stop()
+
+    def on_unmount(self) -> None:
+        self.cancel_work()
+
+    def action_quit(self) -> None:
+        self.cancel_work()
+        self.app.exit()
 
     def on_resize(self) -> None:
         self._fit_brand()
@@ -118,11 +173,16 @@ class UrlScreen(Screen):
 
     @on(UrlInput.Submitted)
     def _on_submit(self, event: UrlInput.Submitted) -> None:
-        url = event.value.strip()
-        if not url:
+        if self._probing or self._pushed:
+            return
+        try:
+            url = clean_url(event.value)
+        except ValueError as exc:
+            self._show_error(str(exc))
             return
 
-        # Show inline probing status
+        self._probing = True
+        self.query_one("#url", UrlInput).disabled = True
         self._show_probe_status(url)
         self._run_probe(url)
 
@@ -141,46 +201,76 @@ class UrlScreen(Screen):
             nonlocal i
             if status.has_class("hidden"):
                 return
-            status.update(f"[dim]{frames[i % len(frames)]} Probing[/dim] [cyan]{url}[/cyan] [dim]...[/dim]")
+            status.update(
+                f"[dim]{frames[i % len(frames)]} Probing[/dim] [cyan]{url}[/cyan] [dim]...[/dim]"
+            )
             i += 1
 
-        self.set_interval(0.08, tick)
+        if self._spinner_timer is not None:
+            self._spinner_timer.stop()
+        self._spinner_timer = self.set_interval(0.08, tick)
 
-    def _hide_probe_status(self, error: str | None = None) -> None:
-        """Hide probe status, optionally show error."""
+    def _show_error(self, message: str) -> None:
+        """Show an inline, auto-hiding error instead of stacking modals."""
         status = self.query_one("#probe-status", Static)
+        status.update(f"[red]✗[/red] {escape(message)}")
+        status.remove_class("hidden")
+        self.set_timer(4.0, lambda: status.add_class("hidden"))
+
+    def _hide_probe_status(self) -> None:
+        if self._spinner_timer is not None:
+            self._spinner_timer.stop()
+            self._spinner_timer = None
+        status = self.query_one("#probe-status", Static)
+        status.update("")
         status.add_class("hidden")
-        if error:
-            status.update(f"[red]✗[/red] {escape(error)}")
-            status.remove_class("hidden")
-            # Auto-hide error after 3 seconds
-            self.set_timer(3.0, lambda: status.add_class("hidden"))
 
     @work(thread=True, exclusive=True, name="probe")
     def _run_probe(self, url: str) -> None:
-        from yoinktui.app import AppConfig
-
         config = getattr(self.app, "config", AppConfig())
         try:
-            info = probe(url, extra_args=config.ytdlp_args)
+            info = probe(
+                url,
+                extra_args=config.ytdlp_args,
+                cancel_check=lambda: self._cancel_probe,
+            )
+            if self._cancel_probe:
+                return
             self.app.call_from_thread(self._on_probed, info, None, url)
-        except BackendError as e:
-            self.app.call_from_thread(self._on_probed, None, str(e), url)
-        except Exception as e:
-            self.app.call_from_thread(self._on_probed, None, str(e), url)
+        except DownloadError as exc:
+            if self._cancel_probe:
+                return
+            self.app.call_from_thread(self._on_probed, None, str(exc), url)
+        except Exception as exc:  # pragma: no cover - defensive
+            if self._cancel_probe:
+                return
+            self.app.call_from_thread(self._on_probed, None, str(exc), url)
 
     def _on_probed(self, info: MediaInfo | None, error: str | None, url: str) -> None:
+        self._probing = False
+        with contextlib.suppress(Exception):
+            self.query_one("#url", UrlInput).disabled = False
+
         if error:
-            self._hide_probe_status(error)
-            self.app.push_screen(ErrorModal(error))
+            self._show_error(error)
             return
-        if info and not info.webpage_url:
+        if info is None:
+            self._show_error("Could not read that URL")
+            return
+        if self._pushed:
+            return
+
+        self._pushed = True
+        if not info.webpage_url:
             info.webpage_url = url
+        save_last_url(url)
+        app_state = getattr(self.app, "state", None)
+        if app_state is not None:
+            app_state.last_url = url
+            app_state.current_url = url
+            app_state.current_info = info
         self._hide_probe_status()
         self.app.push_screen(FormatScreen(info))
-
-    def action_quit(self) -> None:
-        self.app.exit()
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,8 +306,7 @@ class ClipModal(ModalScreen[ClipChoice]):
             yield Static("✂ Download a clip", classes="title")
             yield Static(duration_text, classes="clip-hint")
             yield Static(
-                "Use HH:MM:SS, MM:SS, seconds, or 1h2m3s. "
-                "Leave end blank to go to the end.",
+                "Use HH:MM:SS, MM:SS, seconds, or 1h2m3s. Leave end blank to go to the end.",
                 classes="clip-hint",
             )
             with Horizontal(classes="clip-row"):
@@ -310,9 +399,7 @@ class ClipModal(ModalScreen[ClipChoice]):
             return
         if self.duration:
             if start >= self.duration:
-                self._error(
-                    f"Start is past the end of the video ({human_time(self.duration)})."
-                )
+                self._error(f"Start is past the end of the video ({human_time(self.duration)}).")
                 return
             if end is not None and end > self.duration:
                 self._error(f"Video is only {human_time(self.duration)} long.")
@@ -345,6 +432,7 @@ class FormatScreen(Screen):
         self._selected_format: FormatInfo | None = None
         self._mode: str = "video"  # video | audio | vonly
         self._section: Section | None = None
+        self._download_started = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -365,6 +453,13 @@ class FormatScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        config = getattr(self.app, "config", AppConfig())
+        if config.default_mode in ("video", "vonly", "audio"):
+            self._mode = config.default_mode
+        if not config.show_preview:
+            with contextlib.suppress(Exception):
+                self.query_one("#thumb", ThumbnailCard).display = False
+
         table = self.query_one("#table", FormatTable)
         table.load(self.info.video_formats, self.info.audio_formats)
 
@@ -448,14 +543,8 @@ class FormatScreen(Screen):
         if self._section is None:
             toast.info("Clip: full video")
         else:
-            end = (
-                format_timecode(self._section.end)
-                if self._section.end is not None
-                else "end"
-            )
-            toast.success(
-                f"Clip: {format_timecode(self._section.start)} → {end}"
-            )
+            end = format_timecode(self._section.end) if self._section.end is not None else "end"
+            toast.success(f"Clip: {format_timecode(self._section.start)} → {end}")
 
     def _update_clip_button(self) -> None:
         button = self.query_one("#btn_clip", Button)
@@ -463,11 +552,7 @@ class FormatScreen(Screen):
             button.label = "✂ Clip: Full"
             button.variant = "default"
         else:
-            end = (
-                format_timecode(self._section.end)
-                if self._section.end is not None
-                else "end"
-            )
+            end = format_timecode(self._section.end) if self._section.end is not None else "end"
             button.label = f"✂ {format_timecode(self._section.start)}–{end}"
             button.variant = "primary"
         button.refresh()
@@ -492,7 +577,11 @@ class FormatScreen(Screen):
 
     def _update_mode_buttons(self) -> None:
         """Highlight the active mode button."""
-        for btn_id, mode in [("btn_video", "video"), ("btn_vonly", "vonly"), ("btn_audio", "audio")]:
+        for btn_id, mode in [
+            ("btn_video", "video"),
+            ("btn_vonly", "vonly"),
+            ("btn_audio", "audio"),
+        ]:
             btn = self.query_one(f"#{btn_id}", Button)
             btn.variant = "success" if self._mode == mode else "default"
             btn.refresh()
@@ -528,14 +617,24 @@ class FormatScreen(Screen):
             return full * fraction if full else None
 
         if self._mode == "vonly":
-            fmt = self._selected_format if self._selected_format and self._selected_format.has_video else None
+            fmt = (
+                self._selected_format
+                if self._selected_format and self._selected_format.has_video
+                else None
+            )
             full = self._format_full_size(fmt, duration)
             return full * fraction if full else None
 
-        fmt = self._selected_format if self._selected_format and self._selected_format.has_video else None
+        fmt = (
+            self._selected_format
+            if self._selected_format and self._selected_format.has_video
+            else None
+        )
         if fmt is None:
+            config = getattr(self.app, "config", AppConfig())
+            cap = config.quality_cap or None
             fmt = next(
-                (f for f in self.info.video_formats if (f.height or 0) <= 1080),
+                (f for f in self.info.video_formats if cap is None or (f.height or 0) <= cap),
                 self.info.video_formats[0] if self.info.video_formats else None,
             )
         video_full = self._format_full_size(fmt, duration)
@@ -549,8 +648,15 @@ class FormatScreen(Screen):
         return (video_full + audio_full) * fraction
 
     def _start_download(self) -> None:
+        if self._download_started:
+            return
+        config = getattr(self.app, "config", AppConfig())
         if self._mode == "audio":
-            if self._selected_format and self._selected_format.has_audio and not self._selected_format.has_video:
+            if (
+                self._selected_format
+                and self._selected_format.has_audio
+                and not self._selected_format.has_video
+            ):
                 selector = self._selected_format.format_id
             else:
                 selector = audio_selector()
@@ -561,36 +667,69 @@ class FormatScreen(Screen):
             extract_audio = False
         else:  # video (video + audio)
             format_id = self._selected_format.format_id if self._selected_format else None
-            cap = 1080 if not format_id else None
+            cap = config.quality_cap if not format_id else None
             selector = video_selector(format_id, cap)
             extract_audio = False
 
-        from yoinktui.app import AppConfig
-        config = getattr(self.app, "config", AppConfig())
+        merge_format = config.merge_format
+        if self._mode == "video":
+            video_format = self._selected_format
+            audio_format = (
+                self.info.audio_formats[0]
+                if video_format is not None and not video_format.has_audio
+                else None
+            )
+            merge_format = resolve_merge_format(config.merge_format, video_format, audio_format)
+
         out_dir = config.download_dir
-        out_dir.mkdir(parents=True, exist_ok=True)
-        safe_title = "".join(c for c in self.info.title if c.isalnum() or c in " -_.").strip()[:80] or "video"
-        clip_suffix = (
-            f" [clip {section_slug(self._section)}]"
-            if self._section is not None
-            else ""
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self.query_one("#toast", StatusToast).error(f"Cannot create download directory: {exc}")
+            return
+        safe_title = (
+            "".join(c for c in self.info.title if c.isalnum() or c in " -_.").strip()[:80]
+            or "video"
         )
+        clip_suffix = f" [clip {section_slug(self._section)}]" if self._section is not None else ""
         out_template = str(out_dir / f"{safe_title}{clip_suffix}.%(ext)s")
 
         url = self.info.webpage_url
         if not url and self.info.id:
             url = f"https://www.youtube.com/watch?v={self.info.id}"
 
-        self.app.push_screen(DownloadScreen(
-            url=url,
-            selector=selector,
-            out_template=out_template,
-            extract_audio=extract_audio,
-            title=self.info.title or "video",
-            extra_args=config.ytdlp_args,
-            section=self._section,
-            expected_bytes=self._estimated_section_bytes(),
-        ))
+        app_state = getattr(self.app, "state", None)
+        if app_state is not None:
+            app_state.current_info = self.info
+            app_state.selected_format = self._selected_format
+            app_state.mode = self._mode
+
+        self._download_started = True
+        self.app.push_screen(
+            DownloadScreen(
+                url=url,
+                selector=selector,
+                out_template=out_template,
+                extract_audio=extract_audio,
+                title=self.info.title or "video",
+                extra_args=config.ytdlp_args,
+                section=self._section,
+                expected_bytes=self._estimated_section_bytes(),
+                merge_format=merge_format,
+                audio_format=config.audio_format,
+                audio_quality=config.audio_quality,
+                concurrent_fragments=config.concurrent_fragments,
+                rate_limit=config.rate_limit,
+                write_subtitles=config.write_subtitles,
+                embed_metadata=config.embed_metadata,
+                embed_thumbnail=config.embed_thumbnail,
+                keep_original=config.keep_original,
+            )
+        )
+
+    def on_screen_resume(self) -> None:
+        """Allow another download when the dashboard pops back."""
+        self._download_started = False
 
     def action_back(self) -> None:
         self.app.pop_screen()
@@ -620,6 +759,15 @@ class DownloadScreen(Screen):
         extra_args: list[str] | None = None,
         section: Section | None = None,
         expected_bytes: float | None = None,
+        merge_format: str = "mkv",
+        audio_format: str = "mp3",
+        audio_quality: str = "0",
+        concurrent_fragments: int = 0,
+        rate_limit: str = "",
+        write_subtitles: bool = False,
+        embed_metadata: bool = False,
+        embed_thumbnail: bool = False,
+        keep_original: bool = False,
     ) -> None:
         super().__init__()
         self.url = url
@@ -630,14 +778,19 @@ class DownloadScreen(Screen):
         self.extra_args = list(extra_args or [])
         self.section = section
         self.expected_bytes = expected_bytes
+        self.merge_format = merge_format
+        self.audio_format = audio_format
+        self.audio_quality = audio_quality
+        self.concurrent_fragments = concurrent_fragments
+        self.rate_limit = rate_limit
+        self.write_subtitles = write_subtitles
+        self.embed_metadata = embed_metadata
+        self.embed_thumbnail = embed_thumbnail
+        self.keep_original = keep_original
         if section is None:
             self._clip_label = ""
         else:
-            end = (
-                format_timecode(section.end)
-                if section.end is not None
-                else "end"
-            )
+            end = format_timecode(section.end) if section.end is not None else "end"
             self._clip_label = f"{format_timecode(section.start)} → {end}"
 
         self._control = DownloadControl()
@@ -657,7 +810,7 @@ class DownloadScreen(Screen):
         yield Header(show_clock=True)
         with Container(classes="download-manager"):
             yield DownloadDashboard(
-                title=self.title,
+                title=self.title or "video",
                 extract_audio=self.extract_audio,
                 disk_free=self._disk_free(),
                 single_pass=self.section is not None,
@@ -715,9 +868,18 @@ class DownloadScreen(Screen):
                 section=self.section,
                 expected_bytes=self.expected_bytes,
                 control=self._control,
+                merge_format=self.merge_format,
+                audio_format=self.audio_format,
+                audio_quality=self.audio_quality,
+                concurrent_fragments=self.concurrent_fragments,
+                rate_limit=self.rate_limit,
+                write_subtitles=self.write_subtitles,
+                embed_metadata=self.embed_metadata,
+                embed_thumbnail=self.embed_thumbnail,
+                keep_original=self.keep_original,
             ):
                 self.app.call_from_thread(self._handle_event, event)
-        except BackendError as exc:
+        except DownloadError as exc:
             if not self._cancelled:
                 self.app.call_from_thread(self._handle_error, str(exc))
         except Exception as exc:  # pragma: no cover - defensive
@@ -790,10 +952,8 @@ class DownloadScreen(Screen):
             label = "Merging audio + video…"
         if self.section is not None:
             label += f"  •  {self._clip_label}"
-        try:
+        with contextlib.suppress(Exception):
             self._dashboard().set_phase(label)
-        except Exception:  # pragma: no cover - screen may be closing
-            pass
 
     def _set_finished_controls(self) -> None:
         try:
@@ -819,11 +979,15 @@ class DownloadScreen(Screen):
         self._dismissed = True
         self.app.pop_screen()
 
-    def on_unmount(self) -> None:
-        """Don't let a stray yt-dlp/ffmpeg process outlive the screen."""
+    def cancel_work(self) -> None:
+        """Cancel any running download (safe to call more than once)."""
         self._dismissed = True
         self._cancelled = True
         self._control.cancel()
+
+    def on_unmount(self) -> None:
+        """Don't let a stray yt-dlp/ffmpeg process outlive the screen."""
+        self.cancel_work()
 
     # -- actions ----------------------------------------------------------
 
@@ -871,6 +1035,31 @@ class DownloadScreen(Screen):
             self._finish()
         else:
             self.action_cancel()
+
+
+class StartupErrorScreen(Screen):
+    """Shown when a required external tool is missing."""
+
+    BINDINGS = [("escape", "quit", "Quit"), ("ctrl+c", "quit", "Quit")]
+
+    def __init__(self, report: DependencyReport) -> None:
+        super().__init__()
+        self.report = report
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        with Container(classes="center-box"):
+            yield Static("Missing dependencies", classes="title")
+            yield Static(self.report.as_text(), classes="message", markup=False)
+            yield Static(
+                "Install yt-dlp and ffmpeg, then restart YoinkTUI. "
+                "Run 'yoinktui --doctor' for a full check.",
+                classes="subtitle",
+            )
+        yield Footer()
+
+    def action_quit(self) -> None:
+        self.app.exit()
 
 
 class ErrorModal(ModalScreen):

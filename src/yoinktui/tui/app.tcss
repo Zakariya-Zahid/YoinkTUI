@@ -269,7 +269,7 @@ ModalButtons {
 
 ModalButtons Button {
     margin-left: 2;
-    
+
 }
 
 /* Helper classes */
@@ -344,13 +344,13 @@ FormatScreen .top-row {
 }
 FormatScreen .left-pane {
     width: 1fr;
-    
+
     border:solid white;
 }
 FormatScreen .right-pane {
     width: 60;
     min-width: 60;
-    
+
     border:solid white;
 }
 

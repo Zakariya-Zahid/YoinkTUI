@@ -2,27 +2,21 @@
 
 from __future__ import annotations
 
+import contextlib
 import io
-from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 
+from rich.markup import escape
 from textual import on, work
-from textual._easing import EASING as Easing
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.coordinate import Coordinate
 from textual.css.query import NoMatches
-from textual.events import Click, Resize
 from textual.message import Message
 from textual.reactive import reactive
-from textual.widget import Widget
 from textual.widgets import (
     DataTable,
     Input,
-    Label,
     ProgressBar,
     RichLog,
     Static,
@@ -30,7 +24,7 @@ from textual.widgets import (
 from textual_image.widget import AutoImage
 
 if TYPE_CHECKING:
-    from yoinktui.backend.models import FormatInfo
+    from yoinktui.backend.models import FormatInfo, MediaInfo
 
 
 class ThumbnailCard(Static):
@@ -131,7 +125,7 @@ class FormatTable(DataTable):
     """
 
     class FormatSelected(Message):
-        def __init__(self, fmt: "FormatInfo", row_key, cursor_row: int = 0) -> None:
+        def __init__(self, fmt: FormatInfo, row_key, cursor_row: int = 0) -> None:
             super().__init__()
             self.fmt = fmt
             self.row_key = row_key
@@ -148,7 +142,7 @@ class FormatTable(DataTable):
         self._formats: list[FormatInfo] = []
         self._selected_row: int = -1
 
-    def load(self, video_formats: list["FormatInfo"], audio_formats: list["FormatInfo"]) -> None:
+    def load(self, video_formats: list[FormatInfo], audio_formats: list[FormatInfo]) -> None:
         self.clear(columns=True)
         self._formats = []
         self._selected_row = -1
@@ -217,7 +211,11 @@ class FormatTable(DataTable):
     @on(DataTable.RowSelected)
     def _on_row_selected(self, event: DataTable.RowSelected) -> None:
         if 0 <= event.cursor_row < len(self._formats):
-            self.post_message(self.FormatSelected(self._formats[event.cursor_row], event.row_key, event.cursor_row))
+            self.post_message(
+                self.FormatSelected(
+                    self._formats[event.cursor_row], event.row_key, event.cursor_row
+                )
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -226,27 +224,27 @@ class FormatTable(DataTable):
 
 
 def human_size(num: float | None) -> str:
-    """Format a byte count for display."""
+    """Format a byte count using binary units (1 KiB = 1024 B)."""
     if not num:
         return "—"
     value = float(num)
-    for unit in ("B", "KB", "MB", "GB"):
+    for unit in ("B", "KiB", "MiB", "GiB"):
         if value < 1024:
             return f"{value:.1f} {unit}"
         value /= 1024
-    return f"{value:.1f} TB"
+    return f"{value:.1f} TiB"
 
 
 def human_speed(bps: float | None) -> str:
-    """Format a bytes-per-second rate for display."""
+    """Format a bytes-per-second rate using binary units."""
     if not bps:
         return "—"
     value = float(bps)
-    for unit in ("B/s", "KB/s", "MB/s", "GB/s"):
+    for unit in ("B/s", "KiB/s", "MiB/s", "GiB/s"):
         if value < 1024:
             return f"{value:.1f} {unit}"
         value /= 1024
-    return f"{value:.1f} TB/s"
+    return f"{value:.1f} TiB/s"
 
 
 def human_time(seconds: float | None) -> str:
@@ -511,7 +509,7 @@ class DownloadDashboard(Container):
             yield Static("⬇", classes="dl-badge")
             with Vertical(classes="dl-titles"):
                 yield Static("DOWNLOAD MANAGER", classes="dl-kicker")
-                yield Static(self._title, classes="dl-title")
+                yield Static(escape(self._title), classes="dl-title")
             yield Static("● CONNECTING", classes="dl-status downloading")
         yield Static("Preparing download…", classes="dl-phase")
         with Vertical(classes="dl-queue"):
@@ -561,12 +559,10 @@ class DownloadDashboard(Container):
             "err": "[red]✗[/red]",
         }
         stamp = datetime.now().strftime("%H:%M:%S")
-        try:
+        with contextlib.suppress(NoMatches):
             self.query_one(RichLog).write(
-                f"[dim]{stamp}[/dim]  {icons.get(tone, icons['info'])} {message}"
+                f"[dim]{stamp}[/dim]  {icons.get(tone, icons['info'])} {escape(message)}"
             )
-        except NoMatches:  # pragma: no cover - log not mounted yet
-            pass
 
     def set_status(self, text: str, state: str = "downloading") -> None:
         if text == self._status_text:
@@ -578,7 +574,7 @@ class DownloadDashboard(Container):
         status.add_class(state)
 
     def set_phase(self, text: str) -> None:
-        self.query_one(".dl-phase", Static).update(text)
+        self.query_one(".dl-phase", Static).update(escape(text))
 
     def set_elapsed(self, seconds: float) -> None:
         self.query_one("#stat-elapsed", StatTile).set_value(human_time(seconds))
@@ -618,9 +614,7 @@ class DownloadDashboard(Container):
         self.query_one("#stat-eta", StatTile).set_value(human_time(eta))
         self.query_one("#stat-peak", StatTile).set_value(human_speed(self._peak))
         total_text = human_size(total) if total else "?"
-        progress_label = (
-            "Clip" if self._single_pass else f"Stream {pass_num + 1} of {self._passes}"
-        )
+        progress_label = "Clip" if self._single_pass else f"Stream {pass_num + 1} of {self._passes}"
         self.query_one(".dl-bytes", Static).update(
             f"{progress_label}   "
             f"[bold]{human_size(downloaded)}[/bold] / {total_text}   "
@@ -655,7 +649,7 @@ class DownloadDashboard(Container):
         self.query_one("#dl-overall", ProgressBar).update(total=1, progress=1)
         self.query_one("#stat-speed", StatTile).set_value("—")
         self.query_one("#stat-eta", StatTile).set_value("—")
-        self.query_one(".dl-bytes", Static).update(f"[green]Saved to[/green] {path}")
+        self.query_one(".dl-bytes", Static).update(f"[green]Saved to[/green] {escape(path)}")
         self.add_event(f"Saved to {path}", "ok")
 
     def error(self, message: str) -> None:
@@ -688,8 +682,8 @@ class InfoPanel(Container):
     """
 
     def compose(self):
-        from textual.widgets import Static
         from textual.containers import Horizontal
+        from textual.widgets import Static
 
         yield Horizontal(
             Static("Title:", classes="label"),
@@ -722,17 +716,19 @@ class InfoPanel(Container):
             classes="row",
         )
 
-    def load(self, info) -> None:
-        from yoinktui.backend.models import MediaInfo
-        info: MediaInfo
-        self.query_one("#title", Static).update(info.title or "—")
-        self.query_one("#channel", Static).update(info.display_channel or "—")
-        dur = f"{int(info.duration)//60}:{int(info.duration)%60:02d}" if info.duration else "—"
-        self.query_one("#duration", Static).update(dur)
-        self.query_one("#date", Static).update(info.upload_date or "—")
+    def load(self, info: MediaInfo) -> None:
+        title = escape(info.title or "—")
+        if info.is_live:
+            title = f"{title}  [LIVE]"
+        self.query_one("#title", Static).update(title)
+        self.query_one("#channel", Static).update(escape(info.display_channel or "—"))
+        self.query_one("#duration", Static).update(info.duration_label)
+        self.query_one("#date", Static).update(info.upload_date_label)
         views = f"{int(info.view_count):,}" if info.view_count else "—"
         self.query_one("#views", Static).update(views)
-        self.query_one("#maxq", Static).update(f"{info.max_video_height}p" if info.max_video_height else "—")
+        self.query_one("#maxq", Static).update(
+            f"{info.max_video_height}p" if info.max_video_height else "—"
+        )
 
 
 class UrlInput(Input):
@@ -741,21 +737,21 @@ class UrlInput(Input):
     BINDINGS = [("enter", "submit", "Submit")]
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, placeholder="Paste a YouTube URL (or any yt-dlp supported link)...", **kwargs)
+        kwargs.setdefault("placeholder", "Paste a YouTube URL (or any yt-dlp supported link)...")
+        super().__init__(*args, **kwargs)
         self._valid = True
 
-    def validate(self, value: str) -> str:
+    def validate(self, value: str) -> None:
         """Called on every keystroke; we just track validity."""
-        import re
         # Very loose check — yt-dlp will do real validation
         self._valid = bool(value.strip())
         if self._valid:
             self.remove_class("-invalid")
         else:
             self.add_class("-invalid")
-        return value
+        return None
 
-    def action_submit(self) -> None:
+    async def action_submit(self) -> None:
         if self._valid:
             self.post_message(Input.Submitted(self, self.value))
 
@@ -772,16 +768,16 @@ class StatusToast(RichLog):
         return f"[dim]{datetime.now().strftime('%H:%M')}[/dim]"
 
     def success(self, message: str) -> None:
-        self.write(f"{self._timestamp()} [green]✓[/green] {message}")
+        self.write(f"{self._timestamp()} [green]✓[/green] {escape(message)}")
 
     def warning(self, message: str) -> None:
-        self.write(f"{self._timestamp()} [yellow]⚠[/yellow] {message}")
+        self.write(f"{self._timestamp()} [yellow]⚠[/yellow] {escape(message)}")
 
     def error(self, message: str) -> None:
-        self.write(f"{self._timestamp()} [red]✗[/red] {message}")
+        self.write(f"{self._timestamp()} [red]✗[/red] {escape(message)}")
 
     def info(self, message: str) -> None:
-        self.write(f"{self._timestamp()} [cyan]ℹ[/cyan] {message}")
+        self.write(f"{self._timestamp()} [cyan]ℹ[/cyan] {escape(message)}")
 
 
 class ModalDialog(Container):

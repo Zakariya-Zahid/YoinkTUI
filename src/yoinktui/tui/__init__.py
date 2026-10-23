@@ -1,5 +1,13 @@
 """TUI package."""
 
+from yoinktui.tui.screens import (
+    DownloadScreen,
+    ErrorModal,
+    FormatScreen,
+    StartupErrorScreen,
+    UrlScreen,
+    clean_url,
+)
 from yoinktui.tui.widgets import (
     DownloadDashboard,
     DownloadQueueItem,
@@ -11,12 +19,6 @@ from yoinktui.tui.widgets import (
     ThumbnailCard,
     UrlInput,
 )
-from yoinktui.tui.screens import (
-    DownloadScreen,
-    ErrorModal,
-    FormatScreen,
-    UrlScreen,
-)
 
 __all__ = [
     "DownloadDashboard",
@@ -27,9 +29,11 @@ __all__ = [
     "FormatTable",
     "InfoPanel",
     "ModalDialog",
+    "StartupErrorScreen",
     "StatTile",
     "StatusToast",
     "ThumbnailCard",
     "UrlInput",
     "UrlScreen",
+    "clean_url",
 ]
