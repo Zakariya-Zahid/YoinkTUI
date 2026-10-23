@@ -17,6 +17,7 @@ the progress stream alive.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import queue
 import re
@@ -26,13 +27,14 @@ import subprocess
 import threading
 import time
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
-from yoinktui.backend.models import MediaInfo
+from yoinktui.backend.errors import DownloadError, ErrorReason, classify_error
+from yoinktui.backend.models import FormatInfo, MediaInfo
 
 ProgressKind = Literal["status", "download", "postprocess", "log", "done", "error"]
 
@@ -44,8 +46,8 @@ DL_TEMPLATE = (
 PP_TEMPLATE = "postprocess:PP|%(progress.status)s|%(progress.section_name)s|%(progress.filename)s"
 
 
-class BackendError(RuntimeError):
-    """Raised when yt-dlp fails; ``message`` is safe to show in the UI."""
+# Backwards-compatible alias; new code should import DownloadError.
+BackendError = DownloadError
 
 
 @dataclass(slots=True)
@@ -321,27 +323,231 @@ def tool_available(tool: str) -> bool:
     return shutil.which(tool) is not None
 
 
-def _friendly_error(url: str, message: str) -> str:
-    """Append a useful hint to common site-side blocks."""
-    if "403" not in message:
-        return message
+MIN_YTDLP_VERSION = (2024, 1, 1)
 
+
+@dataclass(frozen=True, slots=True)
+class DependencyStatus:
+    """Result of checking one external tool."""
+
+    tool: str
+    path: str | None
+    version: str | None
+    ok: bool
+    detail: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyReport:
+    """Aggregate pre-flight dependency check."""
+
+    tools: tuple[DependencyStatus, ...]
+
+    @property
+    def errors(self) -> list[str]:
+        return [
+            f"{status.tool} is not installed"
+            + (
+                " — install ffmpeg and make sure it is on PATH."
+                if status.tool == "ffmpeg"
+                else " — install it with 'uv tool install yt-dlp' or your package manager."
+            )
+            for status in self.tools
+            if not status.ok
+        ]
+
+    @property
+    def warnings(self) -> list[str]:
+        return [status.detail for status in self.tools if status.ok and status.detail]
+
+    @property
+    def ok(self) -> bool:
+        return not self.errors
+
+    def as_text(self) -> str:
+        lines = []
+        for status in self.tools:
+            if not status.ok:
+                lines.append(f"✗ {status.tool}: not found")
+                continue
+            version = f" {status.version}" if status.version else ""
+            lines.append(f"✓ {status.tool}:{version} ({status.path})")
+            if status.detail:
+                lines.append(f"  ! {status.detail}")
+        return "\n".join(lines)
+
+
+def _version_args(tool: str) -> list[str]:
+    return ["--version"] if tool == "yt-dlp" else ["-version"]
+
+
+def tool_version(tool: str) -> str | None:
+    """Return the first line of ``tool --version``, or ``None``."""
+    if not tool_available(tool):
+        return None
+    try:
+        proc = subprocess.run(
+            [tool, *_version_args(tool)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    output = (proc.stdout or proc.stderr or "").strip()
+    return output.splitlines()[0].strip() if output else None
+
+
+def _ytdlp_too_old(version_text: str | None) -> bool:
+    if not version_text:
+        return False
+    match = re.search(r"(\d{4})\.(\d{2})\.(\d{2})", version_text)
+    if not match:
+        return False
+    return tuple(int(part) for part in match.groups()) < MIN_YTDLP_VERSION
+
+
+def check_dependencies() -> DependencyReport:
+    """Check that yt-dlp and ffmpeg are available before any screen opens."""
+    statuses: list[DependencyStatus] = []
+    for tool in ("yt-dlp", "ffmpeg"):
+        path = shutil.which(tool)
+        version = tool_version(tool) if path else None
+        detail = ""
+        if tool == "yt-dlp" and _ytdlp_too_old(version):
+            detail = f"yt-dlp {version} is old; run 'yt-dlp -U' for best site support."
+        statuses.append(
+            DependencyStatus(
+                tool=tool, path=path, version=version, ok=path is not None, detail=detail
+            )
+        )
+    return DependencyReport(tuple(statuses))
+
+
+def _stop_process(proc: subprocess.Popen[str], *, grace: float = 5.0) -> None:
+    """Terminate a process (and its group on POSIX), escalating to SIGKILL."""
+    if proc.poll() is not None:
+        return
+    try:
+        if os.name == "posix":
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        else:  # pragma: no cover - Windows path
+            proc.terminate()
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.terminate()
+        except OSError:
+            return
+    try:
+        proc.wait(timeout=grace)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        if os.name == "posix":
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        else:  # pragma: no cover - Windows path
+            proc.kill()
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.kill()
+        except OSError:
+            return
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        proc.wait(timeout=2)
+
+
+def _missing_tool(tool: str) -> DownloadError:
+    if tool == "ffmpeg":
+        return DownloadError(
+            "ffmpeg is not installed",
+            ErrorReason.FFMPEG_MISSING,
+        )
+    return DownloadError(
+        "yt-dlp is not installed",
+        ErrorReason.UNKNOWN,
+        hint="Install yt-dlp and make sure it is on PATH.",
+        action="Try 'uv tool install yt-dlp' or your package manager.",
+    )
+
+
+def _error_for(url: str, message: str) -> DownloadError:
+    """Build a typed error, adding site-specific guidance where useful."""
+    reason = classify_error(message)
+    hint: str | None = None
     host = (urlparse(url).hostname or "").lower()
-    if "tiktok" in host:
+    if "403" in message and "tiktok" in host:
         hint = (
             "TikTok blocked this request (HTTP 403). This is TikTok's anti-bot "
             "protection, not a YoinkTUI limit. Log into TikTok in your browser and "
             "launch with --cookies-from-browser, or try a VPN/proxy."
         )
-    else:
-        hint = (
-            "The site blocked this request (HTTP 403). Cookies or a different "
-            "network may help."
+    return DownloadError(message, reason, hint=hint)
+
+
+def _capture(
+    cmd: list[str],
+    *,
+    timeout: float,
+    cancel_check: Callable[[], bool] | None = None,
+) -> tuple[int, str, str]:
+    """Run a command, capturing output while honouring a timeout/cancel flag."""
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=os.name == "posix",
         )
-    return f"{message}\n\n{hint}"
+    except FileNotFoundError as exc:
+        raise _missing_tool(cmd[0]) from exc
+
+    stdout_chunks: list[str] = []
+    stderr_chunks: list[str] = []
+
+    def _read(stream, chunks: list[str]) -> None:
+        assert stream is not None
+        # A killed process may close the stream while the thread is reading.
+        with contextlib.suppress(OSError):
+            chunks.append(stream.read())
+
+    stdout_thread = threading.Thread(target=_read, args=(proc.stdout, stdout_chunks), daemon=True)
+    stderr_thread = threading.Thread(target=_read, args=(proc.stderr, stderr_chunks), daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+
+    started = time.monotonic()
+    try:
+        while proc.poll() is None:
+            if cancel_check is not None and cancel_check():
+                _stop_process(proc)
+                raise DownloadError("Probe cancelled", ErrorReason.CANCELLED)
+            if timeout and time.monotonic() - started > timeout:
+                _stop_process(proc)
+                raise DownloadError(
+                    "Timed out while contacting the site",
+                    ErrorReason.NETWORK,
+                )
+            time.sleep(0.05)
+    finally:
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
+        if proc.poll() is None:  # pragma: no cover - defensive
+            _stop_process(proc)
+
+    return proc.returncode or 0, "".join(stdout_chunks), "".join(stderr_chunks)
 
 
-def probe(url: str, extra_args: list[str] | None = None) -> MediaInfo:
+def probe(
+    url: str,
+    extra_args: list[str] | None = None,
+    *,
+    timeout: float = 180.0,
+    cancel_check: Callable[[], bool] | None = None,
+) -> MediaInfo:
     """Fetch metadata + format list without downloading anything."""
     cmd = [
         "yt-dlp",
@@ -349,31 +555,33 @@ def probe(url: str, extra_args: list[str] | None = None) -> MediaInfo:
         "--no-playlist",
         "--no-warnings",
         "--ignore-config",
-        "--socket-timeout", "20",
+        "--no-config-locations",
+        "--no-exec",
+        "--socket-timeout",
+        "20",
         *(extra_args or []),
         url,
     ]
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-    except FileNotFoundError as exc:  # pragma: no cover - dependency guard
-        raise BackendError("yt-dlp is not installed") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise BackendError("Timed out while contacting the site") from exc
+    returncode, stdout, stderr = _capture(cmd, timeout=timeout, cancel_check=cancel_check)
 
-    if proc.returncode != 0:
-        message = _extract_error(proc.stderr) or "Could not read that URL"
-        raise BackendError(_friendly_error(url, message))
+    if returncode != 0:
+        message = _extract_error(stderr) or "Could not read that URL"
+        raise _error_for(url, message)
 
     import json
 
     try:
-        raw = json.loads(proc.stdout)
+        raw = json.loads(stdout)
     except json.JSONDecodeError as exc:
-        raise BackendError("yt-dlp returned unreadable data") from exc
+        message = _extract_error(stderr) or "yt-dlp returned unreadable data"
+        raise _error_for(url, message) from exc
 
     info = MediaInfo.from_dict(raw)
     if not info.video_formats and not info.audio_formats:
-        raise BackendError("No downloadable streams were found")
+        raise DownloadError(
+            "No downloadable streams were found",
+            ErrorReason.NO_STREAMS,
+        )
     return info
 
 
@@ -408,6 +616,38 @@ def audio_selector() -> str:
     return "ba/b/bv*"
 
 
+_MP4_VIDEO_CODECS = ("avc", "hev", "hvc", "av01")
+_MP4_AUDIO_CODECS = ("aac", "mp4a", "alac")
+
+
+def _codec_matches(codec: str, prefixes: tuple[str, ...]) -> bool:
+    return codec.lower().startswith(prefixes)
+
+
+def resolve_merge_format(
+    preferred: str,
+    video: FormatInfo | None,
+    audio: FormatInfo | None,
+) -> str:
+    """Pick a container, preferring mp4 when the selected streams allow it.
+
+    ``preferred`` is the configured container (``mkv``, ``mp4``, or ``""`` for
+    ``auto``).  The mkv default falls back to mp4 only when both sides are
+    mp4/aac-compatible, avoiding a needless remux for the common YouTube case.
+    """
+    if preferred != "mkv" or video is None or not video.has_video:
+        return preferred
+    if video.ext not in ("mp4", "m4v"):
+        return preferred
+    if not _codec_matches(video.vcodec, _MP4_VIDEO_CODECS):
+        return preferred
+    if video.has_audio:
+        return "mp4" if _codec_matches(video.acodec, _MP4_AUDIO_CODECS) else preferred
+    if audio is not None and _codec_matches(audio.acodec, _MP4_AUDIO_CODECS):
+        return "mp4"
+    return preferred
+
+
 # ---------------------------------------------------------------------------
 # Download
 # ---------------------------------------------------------------------------
@@ -424,21 +664,39 @@ def _build_cmd(
     merge_format: str,
     extra_args: list[str],
     section: Section | None = None,
+    concurrent_fragments: int = 0,
+    rate_limit: str = "",
+    write_subtitles: bool = False,
+    embed_metadata: bool = False,
+    embed_thumbnail: bool = False,
+    keep_original: bool = False,
 ) -> list[str]:
     cmd = [
         "yt-dlp",
-        "-f", selector,
-        "-o", out_template,
+        "-f",
+        selector,
+        "-o",
+        out_template,
         "--no-playlist",
         "--no-warnings",
         "--ignore-config",
+        "--no-config-locations",
+        "--no-exec",
         "--newline",
         "--no-quiet",
-        "--progress-delta", "0.2",
-        "--progress-template", DL_TEMPLATE,
-        "--progress-template", PP_TEMPLATE,
-        "--print", "after_move:FINAL|%(filepath)s",
+        "--progress-delta",
+        "0.2",
+        "--progress-template",
+        DL_TEMPLATE,
+        "--progress-template",
+        PP_TEMPLATE,
+        "--print",
+        "after_move:FINAL|%(filepath)s",
     ]
+    if concurrent_fragments > 0:
+        cmd += ["--concurrent-fragments", str(concurrent_fragments)]
+    if rate_limit:
+        cmd += ["--limit-rate", rate_limit]
     if section is not None:
         cmd += ["--download-sections", section_spec(section)]
         if section.precise:
@@ -449,6 +707,15 @@ def _build_cmd(
         cmd += ["-x", "--audio-format", audio_format]
         if audio_quality:
             cmd += ["--audio-quality", audio_quality]
+    else:
+        if write_subtitles:
+            cmd += ["--write-subs"]
+        if keep_original:
+            cmd += ["--keep-video"]
+    if embed_metadata:
+        cmd += ["--embed-metadata"]
+    if embed_thumbnail:
+        cmd += ["--embed-thumbnail"]
     if extra_args:
         cmd += extra_args
     cmd.append(url)
@@ -464,11 +731,12 @@ def _parse_line(line: str) -> ProgressEvent | None:
         # Fields: DL | status | downloaded | total | total_estimate | speed | eta
         total = _to_float(parts[3]) if len(parts) > 3 else None
         estimate = _to_float(parts[4]) if len(parts) > 4 else None
+        total = total or estimate or None
         return ProgressEvent(
             kind="download",
             status=parts[1],
             downloaded=_to_float(parts[2]) or 0.0,
-            total=total or estimate,
+            total=total,
             speed=_to_float(parts[5]) if len(parts) > 5 else None,
             eta=_to_float(parts[6]) if len(parts) > 6 else None,
         )
@@ -488,7 +756,7 @@ def _parse_line(line: str) -> ProgressEvent | None:
     return ProgressEvent(kind="log", text=stripped)
 
 
-def download(
+def _download_once(
     url: str,
     *,
     selector: str,
@@ -502,15 +770,15 @@ def download(
     expected_bytes: float | None = None,
     cancel_check=None,
     control: DownloadControl | None = None,
+    concurrent_fragments: int = 0,
+    rate_limit: str = "",
+    write_subtitles: bool = False,
+    embed_metadata: bool = False,
+    embed_thumbnail: bool = False,
+    keep_original: bool = False,
+    stall_timeout: float = 300.0,
 ) -> Iterator[ProgressEvent]:
-    """Yield :class:`ProgressEvent`s while yt-dlp runs.
-
-    ``cancel_check`` is polled periodically; returning True aborts.
-    ``control`` offers thread-safe pause/resume/cancel from another thread.
-    ``section`` limits the download to a start/end time range.
-    ``expected_bytes`` is a size estimate for section downloads, whose
-    downloader does not report live progress itself.
-    """
+    """Run one yt-dlp attempt and stream its progress events."""
     cmd = _build_cmd(
         url,
         selector,
@@ -521,6 +789,12 @@ def download(
         merge_format=merge_format,
         extra_args=list(extra_args or []),
         section=section,
+        concurrent_fragments=concurrent_fragments,
+        rate_limit=rate_limit,
+        write_subtitles=write_subtitles,
+        embed_metadata=embed_metadata,
+        embed_thumbnail=embed_thumbnail,
+        keep_original=keep_original,
     )
 
     try:
@@ -532,17 +806,13 @@ def download(
             bufsize=1,
             start_new_session=os.name == "posix",
         )
-    except FileNotFoundError as exc:  # pragma: no cover
-        raise BackendError("yt-dlp is not installed") from exc
+    except FileNotFoundError as exc:
+        raise _missing_tool("yt-dlp") from exc
 
     if control is not None:
         control.attach(proc)
 
-    monitor = (
-        _FileProgressMonitor(out_template, expected_bytes)
-        if section is not None
-        else None
-    )
+    monitor = _FileProgressMonitor(out_template, expected_bytes) if section is not None else None
 
     # Drain stdout on its own thread so the main loop can sample the output
     # file while a section download is running (yt-dlp is quiet during those).
@@ -563,7 +833,6 @@ def download(
         assert proc.stderr is not None
         for err_line in proc.stderr:
             stderr_lines.append(err_line.rstrip())
-        # Closing here unblocks wait() once stdout is exhausted.
 
     stdout_thread = threading.Thread(target=_drain_stdout, daemon=True)
     stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
@@ -578,14 +847,10 @@ def download(
     def _terminate() -> None:
         if control is not None:
             control.resume()
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        _stop_process(proc)
 
-    assert proc.stdout is not None
     finished_path = ""
+    last_activity = time.monotonic()
     try:
         while True:
             if _is_cancelled():
@@ -593,24 +858,34 @@ def download(
                 yield ProgressEvent(kind="error", text="Cancelled")
                 return
 
+            if stall_timeout and time.monotonic() - last_activity > stall_timeout:
+                _terminate()
+                raise DownloadError(
+                    f"No output for {int(stall_timeout)} seconds; the download looks stalled",
+                    ErrorReason.NETWORK,
+                )
+
             try:
                 raw_line = stdout_queue.get(timeout=0.5)
             except queue.Empty:
                 if monitor is not None:
                     progress = monitor.poll()
                     if progress is not None:
+                        last_activity = time.monotonic()
                         yield progress
                 continue
 
             if raw_line is None:
                 break
 
+            last_activity = time.monotonic()
             line = raw_line.rstrip("\n")
             event = _parse_line(line)
             if event is None:
                 if monitor is not None:
                     progress = monitor.poll()
                     if progress is not None:
+                        last_activity = time.monotonic()
                         yield progress
                 continue
             if event.kind == "done" and event.filename:
@@ -623,12 +898,13 @@ def download(
             if monitor is not None:
                 progress = monitor.poll()
                 if progress is not None:
+                    last_activity = time.monotonic()
                     yield progress
     finally:
         stdout_thread.join(timeout=5)
         stderr_thread.join(timeout=5)
         if proc.poll() is None:
-            proc.kill()
+            _stop_process(proc)
         if control is not None:
             control.detach()
 
@@ -638,9 +914,83 @@ def download(
 
     if proc.returncode not in (0, None) and not finished_path:
         message = _extract_error("\n".join(stderr_lines))
-        raise BackendError(
-            _friendly_error(url, message or f"yt-dlp exited with code {proc.returncode}")
-        )
+        raise _error_for(url, message or f"yt-dlp exited with code {proc.returncode}")
 
     if finished_path:
         yield ProgressEvent(kind="done", filename=finished_path)
+
+
+def download(
+    url: str,
+    *,
+    selector: str,
+    out_template: str,
+    extract_audio: bool = False,
+    audio_format: str = "mp3",
+    audio_quality: str = "0",
+    merge_format: str = "mkv",
+    extra_args: list[str] | None = None,
+    section: Section | None = None,
+    expected_bytes: float | None = None,
+    cancel_check=None,
+    control: DownloadControl | None = None,
+    concurrent_fragments: int = 0,
+    rate_limit: str = "",
+    write_subtitles: bool = False,
+    embed_metadata: bool = False,
+    embed_thumbnail: bool = False,
+    keep_original: bool = False,
+    stall_timeout: float = 300.0,
+    retries: int = 2,
+    retry_backoff: float = 1.0,
+) -> Iterator[ProgressEvent]:
+    """Yield :class:`ProgressEvent`s while yt-dlp runs.
+
+    ``cancel_check`` is polled periodically; returning True aborts.
+    ``control`` offers thread-safe pause/resume/cancel from another thread.
+    ``section`` limits the download to a start/end time range.
+    ``expected_bytes`` is a size estimate for section downloads, whose
+    downloader does not report live progress itself.
+    ``retries`` re-runs the process after transient network failures, with a
+    linear backoff of ``retry_backoff * attempt`` seconds.
+    """
+    attempt = 0
+    while True:
+        try:
+            yield from _download_once(
+                url,
+                selector=selector,
+                out_template=out_template,
+                extract_audio=extract_audio,
+                audio_format=audio_format,
+                audio_quality=audio_quality,
+                merge_format=merge_format,
+                extra_args=extra_args,
+                section=section,
+                expected_bytes=expected_bytes,
+                cancel_check=cancel_check,
+                control=control,
+                concurrent_fragments=concurrent_fragments,
+                rate_limit=rate_limit,
+                write_subtitles=write_subtitles,
+                embed_metadata=embed_metadata,
+                embed_thumbnail=embed_thumbnail,
+                keep_original=keep_original,
+                stall_timeout=stall_timeout,
+            )
+            return
+        except DownloadError as exc:
+            cancelled = (
+                exc.reason is ErrorReason.CANCELLED
+                or (control is not None and control.cancelled)
+                or bool(cancel_check is not None and cancel_check())
+            )
+            if exc.reason is ErrorReason.NETWORK and attempt < retries and not cancelled:
+                attempt += 1
+                yield ProgressEvent(
+                    kind="log",
+                    text=f"Network error: {exc.message}. Retrying ({attempt}/{retries})…",
+                )
+                time.sleep(retry_backoff * attempt)
+                continue
+            raise

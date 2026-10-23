@@ -2,20 +2,30 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
 
 def _num(value: Any) -> float | None:
     """Coerce yt-dlp's occasionally-``None``/``"NA"`` numerics to float."""
-    if value is None:
+    if value is None or isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        return float(value)
-    try:
-        return float(value)
-    except (TypeError, ValueError):
+        number = float(value)
+    else:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+    return number if math.isfinite(number) else None
+
+
+def _int(value: Any) -> int | None:
+    number = _num(value)
+    if number is None or number <= 0:
         return None
+    return int(number)
 
 
 def _text(value: Any) -> str:
@@ -53,8 +63,8 @@ class FormatInfo:
             ext=_text(raw.get("ext")),
             vcodec=_text(raw.get("vcodec")) or "none",
             acodec=_text(raw.get("acodec")) or "none",
-            width=int(raw["width"]) if _num(raw.get("width")) else None,
-            height=int(raw["height"]) if _num(raw.get("height")) else None,
+            width=_int(raw.get("width")),
+            height=_int(raw.get("height")),
             fps=_num(raw.get("fps")),
             tbr=_num(raw.get("tbr")),
             vbr=_num(raw.get("vbr")),
@@ -142,6 +152,8 @@ class MediaInfo:
         video: list[FormatInfo] = []
         audio: list[FormatInfo] = []
         for entry in raw.get("formats") or []:
+            if not isinstance(entry, dict):
+                continue
             fmt = FormatInfo.from_dict(entry)
             if fmt.is_storyboard:
                 continue
@@ -153,7 +165,7 @@ class MediaInfo:
 
         # Highest resolution first, then highest bitrate.
         video.sort(key=lambda f: (f.height or 0, f.tbr or 0), reverse=True)
-        audio.sort(key=lambda f: (f.abr or f.tbr or 0), reverse=True)
+        audio.sort(key=lambda f: f.abr or f.tbr or 0, reverse=True)
 
         return cls(
             id=_text(raw.get("id")),
@@ -181,3 +193,27 @@ class MediaInfo:
     @property
     def max_video_height(self) -> int:
         return max((f.height or 0) for f in self.video_formats) if self.video_formats else 0
+
+    @property
+    def duration_label(self) -> str:
+        """Human duration (``h:mm:ss`` or ``mm:ss``), or an em dash."""
+        if not self.duration or self.duration <= 0:
+            return "—"
+        total = int(self.duration)
+        hours, rem = divmod(total, 3600)
+        minutes, seconds = divmod(rem, 60)
+        if hours:
+            return f"{hours}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes}:{seconds:02d}"
+
+    @property
+    def upload_date_label(self) -> str:
+        """``YYYYMMDD`` from yt-dlp as ``YYYY-MM-DD``."""
+        raw = self.upload_date.strip()
+        if len(raw) == 8 and raw.isdigit():
+            return f"{raw[:4]}-{raw[4:6]}-{raw[6:]}"
+        return raw or "—"
+
+    @property
+    def live_label(self) -> str:
+        return "LIVE" if self.is_live else ""
