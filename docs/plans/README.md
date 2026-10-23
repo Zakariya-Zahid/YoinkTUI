@@ -29,16 +29,16 @@ that code, and is updated continuously rather than "completed".
 | # | Module | Primary files | Status | Phase |
 |---|--------|---------------|--------|-------|
 | 01 | [Download Engine](01-download-engine.md) | `backend/ytdlp.py` | 🟡 | 1 |
-| 02 | [Media Metadata & Extraction](02-media-metadata.md) | `backend/models.py`, `backend/ytdlp.py` | 🔴 | 1 |
+| 02 | [Media Metadata & Extraction](02-media-metadata.md) | `backend/models.py`, `backend/ytdlp.py` | 🟡 | 1 |
 | 03 | [TUI Shell & Navigation](03-tui-shell.md) | `app.py`, `tui/screens.py` | 🟡 | 1 |
 | 04 | [Format Picker & Preview](04-format-picker.md) | `tui/widgets.py` (`FormatTable`, `InfoPanel`, `ThumbnailCard`) | 🟡 | 2 |
 | 05 | [Download Manager & Queue](05-download-manager.md) | `tui/widgets.py` (`DownloadDashboard`), `tui/screens.py` (`DownloadScreen`) | 🟡 | 2 |
 | 06 | [Theming, A11y & Keybindings](06-theming-accessibility.md) | `tui/app.tcss` | 🔴 | 4 |
-| 07 | [Configuration & Profiles](07-configuration-profiles.md) | `app.py` (`AppConfig`) | 🔴 | 1 |
+| 07 | [Configuration & Profiles](07-configuration-profiles.md) | `app.py` (`AppConfig`) | 🟡 | 1 |
 | 08 | [History, Library & Persistence](08-history-library.md) | *(new)* `backend/library.py` | ⚪ | 2 |
 | 09 | [CLI & Automation](09-cli-automation.md) | `__main__.py`, *(new)* `cli.py` | ⚪ | 3 |
-| 10 | [Quality: Tests, CI & Types](10-quality-testing.md) | `tests/`, `.github/workflows/` | 🔴 | 0 |
-| 11 | [Packaging, Release & Distribution](11-packaging-release.md) | `pyproject.toml`, `dist/` | 🔴 | 0 |
+| 10 | [Quality: Tests, CI & Types](10-quality-testing.md) | `tests/`, `.github/workflows/` | 🟡 | 0 |
+| 11 | [Packaging, Release & Distribution](11-packaging-release.md) | `pyproject.toml`, `dist/` | 🟡 | 0 |
 | 12 | [Performance, Resources & Diagnostics](12-performance-diagnostics.md) | all | 🔴 | 4 |
 
 ## Template

@@ -1,6 +1,9 @@
 # Module 02 — Media Metadata & Extraction
 
-> Status: 🔴 needs work · Phase: 1 · Primary files: `backend/models.py`, `probe()` in `backend/ytdlp.py`
+> Status: 🟡 P0 complete (v0.2.0) · Phase: 1 · Primary files: `backend/models.py`, `probe()` in `backend/ytdlp.py`
+>
+> Remaining unchecked items are P1/P2 hardening (invariants, thumbnail proxy,
+> multi-audio/subtitle tracks, richer extraction).
 
 ## 1. Purpose
 
@@ -9,15 +12,18 @@ loose JSON into our domain models. Also owns thumbnail retrieval.
 
 ## 2. Current state
 
-- `probe()` runs `yt-dlp -J` synchronously (180 s timeout) and parses via
-  `MediaInfo.from_dict` / `FormatInfo.from_dict`.
-- `models.py` coerces `None`/`"NA"` numerics and exposes derived labels
-  (`label`, `resolution`, `codec_label`, `size`, `has_video`, `has_audio`).
-- Known bug: `UrlScreen._on_probed` references an undefined `url`
-  (`info.webpage_url = url`) → `NameError` when `webpage_url` is empty.
-- Probe cannot be cancelled; failures come back as strings.
-- Thumbnails are fetched by `ThumbnailCard` via `httpx`, bypassing yt-dlp's
-  cookies/proxy/geo handling.
+- `probe()` runs yt-dlp through `_capture()` with a timeout and cooperative
+  cancellation; parsed JSON flows through `MediaInfo.from_dict` /
+  `FormatInfo.from_dict`.
+- `models.py` coerces `None`/`"NA"`/non-finite numerics and exposes derived
+  labels (`label`, `resolution`, `codec_label`, `size`, `has_video`, `has_audio`,
+  `duration_label`, `upload_date_label`, `live_label`).
+- The old `UrlScreen._on_probed` undefined-`url` bug is fixed; the submitted URL
+  is passed through and persisted.
+- Probe failures are typed (`UNSUPPORTED` vs `NO_STREAMS`, plus network/auth/
+  not-found/geo/cancelled) and rendered by the URL screen inline or in a modal.
+- Thumbnails are still fetched by `ThumbnailCard` via `httpx`, so cookies/proxy/
+  geo handling is not yet shared with yt-dlp (P1).
 
 ## 3. Goals
 
@@ -30,20 +36,20 @@ loose JSON into our domain models. Also owns thumbnail retrieval.
 ## 4. Workstreams
 
 ### WS 02.1 — Fix metadata correctness — **[P0]**
-- [ ] Fix `UrlScreen._on_probed` undefined `url`; pass the submitted URL through.
-- [ ] Add `probe()` timeout + cancellation (cooperative cancel flag).
-- [ ] Validate/sanitise numeric fields; add tests for `"NA"`, `None`, `0`, floats.
-- [ ] Surface `is_live`, `duration`, `upload_date` cleanly in the model.
+- [x] Fix `UrlScreen._on_probed` undefined `url`; pass the submitted URL through.
+- [x] Add `probe()` timeout + cancellation (cooperative cancel flag).
+- [x] Validate/sanitise numeric fields; add tests for `"NA"`, `None`, `0`, floats.
+- [x] Surface `is_live`, `duration`, `upload_date` cleanly in the model.
 
 ### WS 02.2 — Typed probe errors — **[P0]**
-- [ ] Reuse the module 01 error taxonomy for probe failures
+- [x] Reuse the module 01 error taxonomy for probe failures
       (`NOT_FOUND`, `GEO`, `AUTH`, `NETWORK`, `UNSUPPORTED`).
-- [ ] Distinguish "site unsupported" from "no streams found".
+- [x] Distinguish "site unsupported" from "no streams found".
 
 ### WS 02.3 — Model hardening — **[P1]**
 - [ ] Add `__post_init__` invariants (width/height/fps sane ranges).
 - [ ] Add `to_dict()` / `from_dict()` round-trip with a schema version.
-- [ ] Extract `label`/`resolution`/`codec_label` logic into testable helpers.
+- [x] Extract `label`/`resolution`/`codec_label` logic into testable helpers.
 - [ ] Support multi-audio / multi-subtitle tracks in the model.
 
 ### WS 02.4 — Thumbnail pipeline — **[P1]**

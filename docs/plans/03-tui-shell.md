@@ -1,6 +1,9 @@
 # Module 03 — TUI Shell & Navigation
 
-> Status: 🟡 in progress · Phase: 1 · Primary files: `app.py`, `tui/screens.py`, `tui/__init__.py`
+> Status: 🟡 P0 complete (v0.2.0) · Phase: 1 · Primary files: `app.py`, `tui/screens.py`, `tui/__init__.py`
+>
+> Remaining unchecked items are P1 shell extensibility and lifecycle polish
+> (screen registry, command palette, confirm-on-quit, tiny-terminal handling).
 
 ## 1. Purpose
 
@@ -11,12 +14,17 @@ bindings, application state, and the URL-input entry point.
 
 - `YoinkTUIApp` pushes `UrlScreen` on mount; `CSS_PATH="tui/app.tcss"`.
 - Flow: `UrlScreen` → (`probe`) → `FormatScreen` → (`download`) → `DownloadScreen`
-  → pop back to `FormatScreen`; `ErrorModal` for failures.
-- `UrlScreen` shows an inline spinner while probing (no modal).
-- `AppConfig` is a **class attribute** (`config: AppConfig = AppConfig()`),
-  so all app instances share one mutable config.
-- `action_toggle_dark` flips `self.dark`, but custom CSS variables are fixed hex
-  so the toggle has little visible effect.
+  → pop back to `FormatScreen`; `ErrorModal` for hard failures.
+- `UrlScreen` shows an inline spinner while probing (no modal), disables the
+  input, and validates/pastes-cleans URLs before probing.
+- `AppConfig` and `AppState` are **per-instance** values; `AppState` tracks the
+  last/current URL, current `MediaInfo`, selected format, and mode.
+- Last URL is persisted in a small state JSON and pre-filled on relaunch.
+- Missing yt-dlp/ffmpeg opens `StartupErrorScreen` before the URL screen.
+- Duplicate-submit guards prevent stacked screens; focus is restored after pops.
+- The screen graph and Esc semantics are documented in
+  `docs/contracts/navigation.md` and covered by `tests/tui/test_navigation.py`.
+- Config-driven theme (`dark`/`light`/Textual theme name) is applied on startup.
 
 ## 3. Goals
 
@@ -29,23 +37,23 @@ bindings, application state, and the URL-input entry point.
 ## 4. Workstreams
 
 ### WS 03.1 — App state & config ownership — **[P0]**
-- [ ] Replace the class-level `AppConfig` with a per-instance value created in
+- [x] Replace the class-level `AppConfig` with a per-instance value created in
       `__init__` (accept overrides for tests/CLI).
-- [ ] Introduce an `AppState` object (current `MediaInfo`, selected format,
-      mode, queue) to decouple screens.
-- [ ] Move config loading to module 07 and inject it here.
+- [x] Introduce an `AppState` object (current `MediaInfo`, selected format,
+      mode, last/current URL) to decouple screens.
+- [x] Move config loading to module 07 and inject it here.
 
 ### WS 03.2 — Navigation contract — **[P0]**
-- [ ] Define a documented screen graph and back-stack rules
+- [x] Define a documented screen graph and back-stack rules
       (`docs/contracts/navigation.md`).
-- [ ] Guarantee `Esc` semantics per screen (quit / back / cancel) and test them.
-- [ ] Prevent duplicate pushes (double-submit, rapid Enter).
-- [ ] Restore focus to the right widget after each pop.
+- [x] Guarantee `Esc` semantics per screen (quit / back / cancel) and test them.
+- [x] Prevent duplicate pushes (double-submit, rapid Enter).
+- [x] Restore focus to the right widget after each pop.
 
 ### WS 03.3 — Entry point hardening — **[P0]**
-- [ ] Validate URL input before probing (scheme, whitespace, paste cleaning).
-- [ ] Disable the input while probing; show inline errors instead of stacking modals.
-- [ ] Remember the last URL (module 08) and pre-fill on relaunch.
+- [x] Validate URL input before probing (scheme, whitespace, paste cleaning).
+- [x] Disable the input while probing; show inline errors instead of stacking modals.
+- [x] Remember the last URL (state file until module 08) and pre-fill on relaunch.
 
 ### WS 03.4 — Shell extensibility — **[P1]**
 - [ ] Screen registry + typed `ScreenResult` so `push_screen(...)` callbacks

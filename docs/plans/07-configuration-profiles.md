@@ -1,7 +1,9 @@
 # Module 07 — Configuration & Profiles
 
-> Status: 🔴 needs work · Phase: 1 · Primary files: `app.py` (`AppConfig`),
-> *(new)* `backend/config.py`
+> Status: 🟡 P0 complete (v0.2.0) · Phase: 1 · Primary files: `app.py` (`AppConfig`),
+> `backend/config.py`
+>
+> Remaining unchecked items are P1 profiles/presets and schema migration.
 
 ## 1. Purpose
 
@@ -10,16 +12,17 @@ containers, presets/profiles, defaults, and precedence rules.
 
 ## 2. Current state
 
-- `AppConfig` is a per-instance `slots` dataclass (no shared mutable class
-  default) with `download_dir`, `cookies_from_browser`, `proxy`, and
-  `extra_args`.
-- CLI already supports `--download-dir`, `--cookies-from-browser`, `--proxy`,
-  and repeatable `--yt-dlp-arg` overrides; these are passed to both probe and
-  download.
-- Download dir default: `~/Videos/yoinktui/`.
-- Quality cap (`1080`), merge container (`mkv`), and audio format (`mp3`) are
-  still **hardcoded** in `FormatScreen._start_download` / engine defaults.
-- No TOML config file or env-var overrides yet.
+- `AppConfig` is a per-instance `slots` dataclass defined in
+  `backend/config.py`; `app.py` re-exports it for compatibility.
+- Full TOML schema lives in `backend/config.py` with XDG paths
+  (`$XDG_CONFIG_HOME/yoinktui/config.toml`), validation, and warnings.
+- Precedence is **CLI flag > `YOINKTUI_*` env var > TOML file > default**.
+- CLI supports `--config`, `--print-config`, `--write-default-config`,
+  `--doctor`, plus policy/network/UI flags.
+- Invalid values warn and fall back to defaults; a malformed file never crashes.
+- Download dir defaults to `~/Videos/yoinktui/` and is created on startup.
+- Last URL is stored under `$XDG_STATE_HOME/yoinktui/state.json` until module 08.
+- Profiles/presets are not implemented yet (P1).
 
 ## 3. Goals
 
@@ -34,8 +37,9 @@ containers, presets/profiles, defaults, and precedence rules.
 
 ### WS 07.1 — Config object — **[P0]**
 - [x] Make `AppConfig` a per-instance object (no shared mutable class default).
-- [ ] Define the full schema: see below.
-- [ ] Path resolution respecting `XDG_CONFIG_HOME` / `XDG_DATA_HOME`.
+- [x] Define the full schema: see below.
+- [x] Path resolution respecting `XDG_CONFIG_HOME` / `XDG_DATA_HOME`
+      (plus `XDG_STATE_HOME` for the last-URL state).
 
 Draft schema (`config.toml`):
 
@@ -69,10 +73,10 @@ show_preview = true
 ```
 
 ### WS 07.2 — Loader & precedence — **[P0]**
-- [ ] TOML loader with validation and helpful error messages.
-- [ ] Env-var overrides (`YOINKTUI_DOWNLOAD_DIR`, …).
-- [ ] CLI overrides (module 09) merged last.
-- [ ] `yoinktui --print-config` / `--write-default-config` (with module 09).
+- [x] TOML loader with validation and helpful error messages.
+- [x] Env-var overrides (`YOINKTUI_DOWNLOAD_DIR`, …).
+- [x] CLI overrides (module 09) merged last.
+- [x] `yoinktui --print-config` / `--write-default-config` (with module 09).
 
 ### WS 07.3 — Profiles / presets — **[P1]**
 - [ ] Named profiles selectable in the UI (mode + container + cap bundle).
@@ -81,8 +85,8 @@ show_preview = true
 
 ### WS 07.4 — Migration & robustness — **[P1]**
 - [ ] Config schema version + migration on upgrade.
-- [ ] Fall back to defaults on parse errors, surface a warning (never crash).
-- [ ] Validate paths are writable; create dirs with correct perms.
+- [x] Fall back to defaults on parse errors, surface a warning (never crash).
+- [~] Validate paths are writable; create dirs with correct perms.
 
 ## 5. Milestones
 
