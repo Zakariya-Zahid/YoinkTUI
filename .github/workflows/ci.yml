@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install project + dev dependencies
+        run: uv sync --locked --dev --python ${{ matrix.python-version }}
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Type check
+        run: uv run mypy src
+
+      - name: Tests
+        run: uv run pytest -q
+
+      - name: Upload snapshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshots-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: tests/tui/__snapshots__/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  packaging:
+    name: packaging (wheel install)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Build sdist + wheel
+        run: uv build
+
+      - name: Install wheel into a fresh venv
+        run: |
+          uv python install 3.12
+          uv venv /tmp/yoinktui-wheel --python 3.12
+          uv pip install --python /tmp/yoinktui-wheel/bin/python dist/*.whl
+
+      - name: Verify installed artifact
+        run: |
+          /tmp/yoinktui-wheel/bin/yoinktui --version
+          /tmp/yoinktui-wheel/bin/yoinktui --print-config | head -5
+          /tmp/yoinktui-wheel/bin/python - <<'PY'
+          from importlib.resources import files
+
+          package = files("yoinktui")
+          assert package.joinpath("tui", "app.tcss").is_file()
+          assert package.joinpath("assets", "logo-dark.png").is_file()
+          print("packaged data files: OK")
+          PY

@@ -1,12 +1,27 @@
 [project]
 name = "yoinktui"
-version = "0.1.0"
+version = "0.2.0"
 description = "Steam-style TUI download manager for YouTube and 1000+ sites via yt-dlp + ffmpeg"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Zakariya Zahid", email = "zakryiabukhari@gmail.com" }
 ]
 requires-python = ">=3.12"
+keywords = ["youtube", "download", "tui", "yt-dlp", "terminal", "textual"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Utilities",
+]
 dependencies = [
     "httpx>=0.28.1",
     "pillow>=13.0.0",
@@ -18,6 +33,48 @@ dependencies = [
 [project.scripts]
 yoinktui = "yoinktui.__main__:main"
 
+[project.urls]
+Homepage = "https://github.com/Zakariya-Zahid/YoinkTUI"
+Repository = "https://github.com/Zakariya-Zahid/YoinkTUI"
+Issues = "https://github.com/Zakariya-Zahid/YoinkTUI/issues"
+Changelog = "https://github.com/Zakariya-Zahid/YoinkTUI/blob/main/CHANGELOG.md"
+
 [build-system]
 requires = ["uv_build>=0.12.23,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.14",
+    "pre-commit>=4.0",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-textual-snapshot>=1.0",
+    "ruff>=0.9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra"
+markers = [
+    "slow: slow integration-style test",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+exclude = ["tests/"]
+
+[tool.uv.build-backend]
+module-root = "src"

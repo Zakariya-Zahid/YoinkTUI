@@ -4,4 +4,9 @@ Backend: yt-dlp (extraction) + ffmpeg (merge/postprocess), orchestrated the
 way yt-x does it, but with an entirely original interface.
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:  # pyproject.toml is the single source of truth for the version
+    __version__ = version("yoinktui")
+except PackageNotFoundError:  # pragma: no cover - running from a raw source tree
+    __version__ = "0.0.0+source"
