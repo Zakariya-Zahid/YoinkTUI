@@ -2,7 +2,7 @@
 
 > Status: 🟡 P0 complete (v0.2.0) · Phase: 1 · Primary files: `src/yoinktui/backend/ytdlp.py`
 >
-> Remaining unchecked items are P1/P2 polish (resume, chapters, SponsorBlock,
+> Remaining unchecked items are P2 polish (chapters, SponsorBlock,
 > post-download verification, optional postprocessing heartbeat).
 
 ## 1. Purpose
@@ -35,6 +35,8 @@ without any TUI.
   metadata/thumbnail embedding, keep-original) is config-driven (module 07).
 - Failures are typed (`DownloadError` + `ErrorReason`) with hints/actions.
 - Sizes/speeds use binary units (KiB/MiB/GiB) everywhere.
+- Site-specific workflow notes live in `docs/guides/udemy.md` (cookies,
+  browser impersonation, legacy lecture URLs, and DRM limits).
 
 ## 3. Goals
 
@@ -80,9 +82,11 @@ without any TUI.
 - [x] Replace bare `BackendError(str)` raised sites with typed errors.
 
 ### WS 01.5 — Extended capabilities — **[P2]**
-- [ ] Resume interrupted downloads (`-c` / `.part` handling) + UI affordance.
-- [ ] Subtitles (`--write-subs`), chapters, metadata embed, thumbnail embed.
-- [ ] SponsorBlock, cookies-from-browser, proxy, and playlist opt-in.
+- [x] Resume interrupted downloads (`--continue` / `.part` handling) + the
+      queue screen's resume affordance.
+- [x] Subtitles (`--write-subs`), metadata embed, thumbnail embed.
+- [ ] Chapters and SponsorBlock.
+- [x] Cookies-from-browser, proxy, and playlist opt-in (`--yes-playlist`).
 - [ ] Post-download verification (checksum/ffprobe) as an optional step.
 
 ## 5. Milestones

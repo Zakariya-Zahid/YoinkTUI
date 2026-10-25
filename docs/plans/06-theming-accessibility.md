@@ -9,16 +9,20 @@ resilience, accessibility, and the keyboard model.
 
 ## 2. Current state
 
-- Single dark palette defined as custom variables in `app.tcss`
-  (`$accent`, `$surface-raised`, `$surface-hover`, `$overlay`, …).
+- `textual-dark` and `textual-light` are both snapshot-tested; custom semantic
+  variables (`$accent`, `$surface-raised`, `$surface-hover`, `$overlay`, …)
+  remain in `app.tcss` and do not fully follow the built-in theme switch.
 - Global `ProgressBar { margin: 0 }`; widget `DEFAULT_CSS` blocks mix built-in
   Textual vars (`$surface`, `$accent`) with app vars.
 - Dead styles: `InfoLabel`, `InfoValue`, `.LoadingSpinner`, `.LoadingShimmer`,
   `.selected-row` (never applied as a class), `#dismiss` duplicate, stray
   `.datatable--row-hover`.
-- Fixed geometry: `right-pane: width 60`, `min-height: 22`, `.center-box 80`,
-  `ErrorModal .dialog 70` → breaks on narrow/short terminals.
+- Responsive work in progress: FormatScreen panes use proportions and
+  min/max bounds, the URL/startup cards auto-size with max-width/height, queue
+  and library tables use explicit widths, and the clip modal wraps its hints.
+  `ErrorModal .dialog` and the URL card still have fixed preferred widths.
 - `Ctrl+D` toggles `dark`, but fixed hex vars make the toggle nearly invisible.
+- Header and Footer render again, and the Footer exposes each screen's bindings.
 - Emoji/box glyphs used in labels (may be double-width or missing in some fonts).
 
 ## 3. Goals
@@ -38,10 +42,10 @@ resilience, accessibility, and the keyboard model.
 - [ ] Name tokens semantically (`$dl-active`, `$data-row-odd`) rather than by color.
 
 ### WS 06.2 — Responsive layout — **[P0]**
-- [ ] Replace fixed widths/heights with proportions + `min-width`/`min-height`.
+- [~] Replace fixed widths/heights with proportions + `min-width`/`min-height`.
 - [ ] Define breakpoints: compact (< 80 cols), regular, wide.
 - [ ] Graceful degradation: hide preview pane before the table.
-- [ ] Test at 60×20, 80×24, 120×40, 200×60.
+- [~] Test at 60×20, 80×24, 120×40, 200×60.
 
 ### WS 06.3 — Accessibility — **[P1]**
 - [ ] `--no-color` / `NO_COLOR` honored; meaning via text markers, not hue.
@@ -53,12 +57,12 @@ resilience, accessibility, and the keyboard model.
 - [ ] Documented, conflict-free binding map per screen (`docs/contracts/keys.md`).
 - [ ] Vim-like navigation everywhere; `?` opens a help/cheat-sheet overlay.
 - [ ] Remappable bindings via config (module 07).
-- [ ] Footer shows the most relevant bindings; palette shows the rest.
+- [~] Footer shows the most relevant bindings; palette shows the rest.
 
 ### WS 06.5 — Style hygiene — **[P2]**
 - [ ] Remove dead CSS selectors and duplicate rules.
 - [ ] Lint/format the stylesheet; keep one declaration style.
-- [ ] Snapshot tests for each theme (module 10).
+- [x] Snapshot tests for each theme (module 10).
 
 ## 5. Milestones
 

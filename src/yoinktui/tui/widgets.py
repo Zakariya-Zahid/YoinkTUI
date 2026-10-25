@@ -7,7 +7,6 @@ import io
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from rich.markup import escape
 from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
@@ -22,6 +21,8 @@ from textual.widgets import (
     Static,
 )
 from textual_image.widget import AutoImage
+
+from yoinktui.tui.markup import escape_markup as escape
 
 if TYPE_CHECKING:
     from yoinktui.backend.models import FormatInfo, MediaInfo
@@ -174,7 +175,7 @@ class FormatTable(DataTable):
                 fmt.codec_label,
                 fmt.ext.upper(),
                 size,
-                fmt.format_note or fmt.dynamic_range or "",
+                escape(fmt.format_note or fmt.dynamic_range or ""),
                 key=f"v{i}",
             )
 
@@ -189,7 +190,7 @@ class FormatTable(DataTable):
                 fmt.codec_label,
                 fmt.ext.upper(),
                 size,
-                fmt.format_note or "",
+                escape(fmt.format_note or ""),
                 key=f"a{i}",
             )
 
@@ -199,6 +200,12 @@ class FormatTable(DataTable):
             self._selected_row = row
             self.move_cursor(row=row)
             self.refresh()
+
+    def format_at(self, row: int) -> FormatInfo | None:
+        """Return the format at a table row, or None for an invalid row."""
+        if 0 <= row < len(self._formats):
+            return self._formats[row]
+        return None
 
     @staticmethod
     def _human_size(num: float) -> str:
@@ -342,6 +349,12 @@ class DownloadQueueItem(Container):
     DownloadQueueItem.paused .q-state {
         color: $warning;
     }
+    DownloadQueueItem.error {
+        border-left: thick $error;
+    }
+    DownloadQueueItem.error .q-state {
+        color: $error;
+    }
     """
 
     def __init__(self, icon: str, label: str, **kwargs) -> None:
@@ -351,7 +364,7 @@ class DownloadQueueItem(Container):
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="q-head"):
-            yield Static(f"{self._icon} {self._label}", classes="q-label")
+            yield Static(f"{self._icon} {escape(self._label)}", classes="q-label")
             yield Static("· Queued", classes="q-state")
             yield Static("", classes="q-bytes")
         yield ProgressBar(total=1, show_percentage=False, show_eta=False)
@@ -359,15 +372,24 @@ class DownloadQueueItem(Container):
     # -- state helpers ----------------------------------------------------
 
     def _set_state(self, state: str, text: str) -> None:
-        self.remove_class("active", "done", "paused", "pending")
+        self.remove_class("active", "done", "paused", "pending", "error")
         self.add_class(state)
         self.query_one(".q-state", Static).update(text)
+
+    def set_icon(self, icon: str) -> None:
+        self._icon = icon
+        self.set_label(self._label)
+
+    def set_label(self, label: str) -> None:
+        self._label = label
+        with contextlib.suppress(NoMatches):
+            self.query_one(".q-label", Static).update(f"{self._icon} {escape(label)}")
 
     def _set_bar(self, fraction: float) -> None:
         self.query_one(ProgressBar).update(total=1, progress=min(max(fraction, 0.0), 1.0))
 
     def _set_bytes(self, text: str) -> None:
-        self.query_one(".q-bytes", Static).update(text)
+        self.query_one(".q-bytes", Static).update(escape(text))
 
     def set_pending(self) -> None:
         self._set_state("pending", "· Queued")
@@ -395,6 +417,12 @@ class DownloadQueueItem(Container):
         self._set_bar(1.0)
         if size:
             self._set_bytes(human_size(size))
+
+    def set_error(self, message: str = "") -> None:
+        self._set_state("error", "✗ Failed")
+        self._set_bar(0.0)
+        if message:
+            self._set_bytes(message[:28])
 
 
 class DownloadDashboard(Container):
@@ -462,6 +490,13 @@ class DownloadDashboard(Container):
         height: auto;
         margin-bottom: 1;
     }
+    DownloadDashboard .dl-item-queue {
+        height: auto;
+        max-height: 8;
+        overflow-y: auto;
+        margin-bottom: 1;
+        scrollbar-size-vertical: 1;
+    }
     DownloadDashboard .dl-stats {
         height: 2;
         margin-bottom: 1;
@@ -493,6 +528,7 @@ class DownloadDashboard(Container):
         extract_audio: bool = False,
         disk_free: str = "—",
         single_pass: bool = False,
+        queue_titles: list[str] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -503,6 +539,9 @@ class DownloadDashboard(Container):
         self._passes = 1 if (extract_audio or single_pass) else 2
         self._peak = 0.0
         self._status_text = "● CONNECTING"
+        self._queue_titles = list(queue_titles or [])
+        self._queue_pos = 0
+        self._queue_total = max(len(self._queue_titles), 1)
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="dl-top"):
@@ -512,8 +551,22 @@ class DownloadDashboard(Container):
                 yield Static(escape(self._title), classes="dl-title")
             yield Static("● CONNECTING", classes="dl-status downloading")
         yield Static("Preparing download…", classes="dl-phase")
-        with Vertical(classes="dl-queue"):
-            if self._single_pass:
+        if self._queue_titles:
+            with Vertical(classes="dl-item-queue", id="item-queue"):
+                for index, title in enumerate(self._queue_titles):
+                    yield DownloadQueueItem(
+                        "•",
+                        f"{index + 1:02d} {title}",
+                        id=f"item-{index}",
+                        classes="queue-row",
+                    )
+        with Vertical(classes="dl-queue", id="stream-queue"):
+            # A mixed-mode queue needs both rows available even when the first
+            # item is audio-only or a clip; begin_item() hides the unused row.
+            if self._queue_titles:
+                yield DownloadQueueItem("▶", "Video stream", id="q-video")
+                yield DownloadQueueItem("🎵", "Audio stream", id="q-audio")
+            elif self._single_pass:
                 yield DownloadQueueItem("✂", "Clip stream", id="q-clip")
             elif self._extract_audio:
                 yield DownloadQueueItem("🎵", "Audio stream", id="q-audio")
@@ -537,19 +590,111 @@ class DownloadDashboard(Container):
         yield RichLog(classes="dl-log", markup=True, max_lines=300, auto_scroll=True)
 
     def on_mount(self) -> None:
-        for item in self.query(DownloadQueueItem):
+        for item in self._stream_items():
+            item.set_pending()
+        for item in self._item_rows():
             item.set_pending()
         self.add_event("Connecting to media source…")
 
     # -- public API -------------------------------------------------------
+
+    def _stream_items(self) -> list[DownloadQueueItem]:
+        return [
+            item
+            for item in self.query(DownloadQueueItem)
+            if item.parent is not None and item.parent.id == "stream-queue"
+        ]
+
+    def _item_rows(self) -> list[DownloadQueueItem]:
+        return [
+            item
+            for item in self.query(DownloadQueueItem)
+            if item.parent is not None and item.parent.id == "item-queue"
+        ]
 
     @property
     def passes(self) -> int:
         return self._passes
 
     def item(self, index: int) -> DownloadQueueItem | None:
-        items = list(self.query(DownloadQueueItem))
+        """Return a stream row (kept for the single-download tests/API)."""
+        return self.stream_item(index)
+
+    def stream_item(self, index: int) -> DownloadQueueItem | None:
+        items = self._stream_items()
         return items[index] if 0 <= index < len(items) else None
+
+    def queue_row(self, index: int) -> DownloadQueueItem | None:
+        items = self._item_rows()
+        return items[index] if 0 <= index < len(items) else None
+
+    def set_queue_position(self, index: int, total: int) -> None:
+        self._queue_pos = max(index, 0)
+        self._queue_total = max(total, 1)
+        row = self.queue_row(index)
+        if row is not None:
+            row.set_active()
+        if total > 1:
+            self.query_one(".dl-kicker", Static).update(
+                f"DOWNLOAD MANAGER  •  ITEM {index + 1}/{total}"
+            )
+
+    def begin_item(
+        self,
+        title: str,
+        *,
+        extract_audio: bool,
+        single_pass: bool,
+        index: int,
+        total: int,
+    ) -> None:
+        """Reset the stream rows for the next queue item."""
+        self._title = title or "Untitled"
+        self._extract_audio = extract_audio
+        self._single_pass = single_pass
+        self._passes = 1 if (extract_audio or single_pass) else 2
+        self._peak = 0.0
+        self.query_one(".dl-title", Static).update(escape(self._title))
+        self.set_queue_position(index, total)
+        streams = self._stream_items()
+        for stream in streams:
+            stream.display = True
+            stream.set_pending()
+        if single_pass:
+            if streams:
+                streams[0].set_icon("✂")
+                streams[0].set_label("Clip stream")
+            for stream in streams[1:]:
+                stream.display = False
+        elif extract_audio:
+            if streams:
+                streams[0].set_icon("🎵")
+                streams[0].set_label("Audio stream")
+            for stream in streams[1:]:
+                stream.display = False
+        else:
+            if streams:
+                streams[0].set_icon("▶")
+                streams[0].set_label("Video stream")
+            if len(streams) > 1:
+                streams[1].set_icon("🎵")
+                streams[1].set_label("Audio stream")
+        self.query_one("#dl-overall", ProgressBar).update(total=1, progress=0)
+        self.query_one(".dl-bytes", Static).update("")
+        for tile in ("#stat-speed", "#stat-eta", "#stat-peak"):
+            self.query_one(tile, StatTile).set_value("—")
+        self.set_status("● CONNECTING", "downloading")
+        self.set_phase("Preparing download…")
+
+    def mark_item_done(self, index: int, size: float | None = None) -> None:
+        row = self.queue_row(index)
+        if row is not None:
+            row.set_done(size)
+
+    def fail_item(self, index: int, message: str = "") -> None:
+        row = self.queue_row(index)
+        if row is not None:
+            row.set_error(message)
 
     def add_event(self, message: str, tone: str = "info") -> None:
         icons = {
@@ -580,7 +725,7 @@ class DownloadDashboard(Container):
         self.query_one("#stat-elapsed", StatTile).set_value(human_time(seconds))
 
     def mark_done(self, index: int, size: float | None = None) -> None:
-        item = self.item(index)
+        item = self.stream_item(index)
         if item is not None:
             item.set_done(size)
 
@@ -594,14 +739,18 @@ class DownloadDashboard(Container):
     ) -> None:
         # Everything before the current pass is complete.
         for index in range(min(pass_num, self._passes)):
-            item = self.item(index)
+            item = self.stream_item(index)
             if item is not None and not item.has_class("done"):
                 item.set_done()
 
-        current = self.item(pass_num)
+        current = self.stream_item(pass_num)
         if current is not None:
             current.set_active()
             current.set_progress(downloaded, total)
+
+        row = self.queue_row(self._queue_pos)
+        if row is not None and row.has_class("active"):
+            row.set_progress(downloaded, total)
 
         if speed:
             self._peak = max(self._peak, speed)
@@ -633,24 +782,39 @@ class DownloadDashboard(Container):
             self.set_phase("Download paused — press P to resume")
             self.query_one("#stat-speed", StatTile).set_value("Paused")
             self.query_one("#stat-eta", StatTile).set_value("—")
-            for item in self.query(DownloadQueueItem).filter(".active"):
-                item.set_paused()
+            for item in self._stream_items():
+                if item.has_class("active"):
+                    item.set_paused()
+            row = self.queue_row(self._queue_pos)
+            if row is not None and row.has_class("active"):
+                row.set_paused()
         else:
             self.set_status("● DOWNLOADING", "downloading")
             self.query_one("#stat-speed", StatTile).set_value("—")
-            for item in self.query(DownloadQueueItem).filter(".paused"):
-                item.set_active()
+            for item in self._stream_items():
+                if item.has_class("paused"):
+                    item.set_active()
+            row = self.queue_row(self._queue_pos)
+            if row is not None and row.has_class("paused"):
+                row.set_active()
 
     def finish(self, path: str) -> None:
         self.set_status("✓ COMPLETE", "complete")
         self.set_phase("Download finished")
-        for item in self.query(DownloadQueueItem):
+        for item in self._stream_items():
             item.set_done()
+        for row in self._item_rows():
+            if not row.has_class("error"):
+                row.set_done()
         self.query_one("#dl-overall", ProgressBar).update(total=1, progress=1)
         self.query_one("#stat-speed", StatTile).set_value("—")
         self.query_one("#stat-eta", StatTile).set_value("—")
-        self.query_one(".dl-bytes", Static).update(f"[green]Saved to[/green] {escape(path)}")
-        self.add_event(f"Saved to {path}", "ok")
+        if path:
+            self.query_one(".dl-bytes", Static).update(f"[green]Saved to[/green] {escape(path)}")
+            self.add_event(f"Saved to {path}", "ok")
+        else:
+            self.query_one(".dl-bytes", Static).update("[green]Queue finished[/green]")
+            self.add_event("Queue finished", "ok")
 
     def error(self, message: str) -> None:
         self.set_status("✗ FAILED", "error")
@@ -760,24 +924,30 @@ class StatusToast(RichLog):
     """Transient toast messages at the bottom."""
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, max_lines=4, markup=True, auto_scroll=True, **kwargs)
+        # auto_scroll in RichLog can park a one-line log one row past the end,
+        # leaving the toast blank; scroll explicitly after each message.
+        super().__init__(*args, max_lines=4, markup=True, wrap=True, auto_scroll=False, **kwargs)
 
     @staticmethod
     def _timestamp() -> str:
         """Return a dimmed HH:MM timestamp string."""
         return f"[dim]{datetime.now().strftime('%H:%M')}[/dim]"
 
+    def _log(self, message: str) -> None:
+        self.write(message)
+        self.scroll_to(y=max(0, len(self.lines) - 1), animate=False)
+
     def success(self, message: str) -> None:
-        self.write(f"{self._timestamp()} [green]✓[/green] {escape(message)}")
+        self._log(f"{self._timestamp()} [green]✓[/green] {escape(message)}")
 
     def warning(self, message: str) -> None:
-        self.write(f"{self._timestamp()} [yellow]⚠[/yellow] {escape(message)}")
+        self._log(f"{self._timestamp()} [yellow]⚠[/yellow] {escape(message)}")
 
     def error(self, message: str) -> None:
-        self.write(f"{self._timestamp()} [red]✗[/red] {escape(message)}")
+        self._log(f"{self._timestamp()} [red]✗[/red] {escape(message)}")
 
     def info(self, message: str) -> None:
-        self.write(f"{self._timestamp()} [cyan]ℹ[/cyan] {escape(message)}")
+        self._log(f"{self._timestamp()} [cyan]ℹ[/cyan] {escape(message)}")
 
 
 class ModalDialog(Container):

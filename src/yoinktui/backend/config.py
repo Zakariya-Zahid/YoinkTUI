@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from yoinktui.backend.presets import PRESET_KEYS, Preset, builtin_presets
+
 APP_NAME = "yoinktui"
 
 CONTAINERS = ("mkv", "mp4", "auto")
@@ -101,6 +103,9 @@ class AppConfig:
     ascii: bool = False
     no_color: bool = False
     show_preview: bool = True
+
+    # [presets.<name>] — built-ins are merged with user-defined overrides.
+    presets: dict[str, Preset] = field(default_factory=builtin_presets)
 
     warnings: list[str] = field(default_factory=list, repr=False)
 
@@ -250,6 +255,102 @@ def _apply_section(
             setattr(config, setter.attr, coerced)
 
 
+def _apply_presets(
+    config: AppConfig,
+    data: Any,
+    warnings: list[str],
+    *,
+    strict: bool,
+    source: str,
+) -> None:
+    """Merge ``[presets.<name>]`` tables over the shipped built-ins."""
+    if data is None:
+        return
+    if not isinstance(data, Mapping):
+        message = f"{source}: [presets] must be a table of named tables"
+        if strict:
+            raise ConfigError(message)
+        warnings.append(message)
+        return
+
+    kinds: dict[str, type] = {
+        "mode": str,
+        "quality_cap": int,
+        "container": str,
+        "audio_format": str,
+        "audio_quality": str,
+        "write_subtitles": bool,
+        "embed_metadata": bool,
+        "embed_thumbnail": bool,
+        "keep_original": bool,
+        "description": str,
+    }
+    for raw_name, raw_values in data.items():
+        name = str(raw_name).strip()
+        if not name:
+            message = f"{source}: preset names cannot be empty"
+            if strict:
+                raise ConfigError(message)
+            warnings.append(message)
+            continue
+        if not isinstance(raw_values, Mapping):
+            message = f"{source}: [presets.{name}] must be a table"
+            if strict:
+                raise ConfigError(message)
+            warnings.append(message)
+            continue
+
+        base = config.presets.get(name) or Preset(name=name)
+        values = base.to_dict()
+        for key in raw_values:
+            if key not in PRESET_KEYS:
+                message = f"{source}: unknown option [presets.{name}].{key}"
+                if strict:
+                    raise ConfigError(message)
+                warnings.append(message)
+
+        for key, kind in kinds.items():
+            if key not in raw_values:
+                continue
+            coerced = _coerce(
+                raw_values[key],
+                kind,
+                f"[presets.{name}].{key}",
+                warnings,
+            )
+            if coerced is not None:
+                values[key] = coerced
+
+        if values["mode"] not in MODES:
+            message = f"[presets.{name}].mode must be one of {', '.join(MODES)}; ignoring"
+            if strict:
+                raise ConfigError(message)
+            warnings.append(message)
+            values["mode"] = base.mode
+        if values["container"] not in CONTAINERS:
+            message = f"[presets.{name}].container must be one of {', '.join(CONTAINERS)}; ignoring"
+            if strict:
+                raise ConfigError(message)
+            warnings.append(message)
+            values["container"] = base.container
+        if values["audio_format"] not in AUDIO_FORMATS:
+            message = (
+                f"[presets.{name}].audio_format must be one of {', '.join(AUDIO_FORMATS)}; ignoring"
+            )
+            if strict:
+                raise ConfigError(message)
+            warnings.append(message)
+            values["audio_format"] = base.audio_format
+        if values["quality_cap"] < 0:
+            message = f"[presets.{name}].quality_cap must be >= 0; ignoring"
+            if strict:
+                raise ConfigError(message)
+            warnings.append(message)
+            values["quality_cap"] = base.quality_cap
+
+        config.presets[name] = Preset(name=name, **values)
+
+
 def _apply_env(config: AppConfig, env: Mapping[str, str], warnings: list[str]) -> None:
     for env_name, (attr, kind) in _ENV_SETTERS.items():
         if env_name not in env:
@@ -367,6 +468,13 @@ def load_config(
             strict=strict,
             source=str(config_path),
         )
+    _apply_presets(
+        config,
+        raw.get("presets"),
+        warnings,
+        strict=strict,
+        source=str(config_path),
+    )
 
     _apply_env(config, os.environ if env is None else env, warnings)
     _apply_cli(config, cli or {}, warnings)
@@ -406,6 +514,7 @@ def config_to_dict(config: AppConfig) -> dict[str, Any]:
             "no_color": config.no_color,
             "show_preview": config.show_preview,
         },
+        "presets": {name: preset.to_dict() for name, preset in config.presets.items()},
     }
 
 
@@ -424,6 +533,13 @@ def to_toml(config: AppConfig) -> str:
     data = config_to_dict(config)
     lines: list[str] = []
     for section, values in data.items():
+        if section == "presets":
+            for name, preset_values in values.items():
+                lines.append(f"[presets.{name}]")
+                for key, value in preset_values.items():
+                    lines.append(f"{key} = {_toml_value(value)}")
+                lines.append("")
+            continue
         lines.append(f"[{section}]")
         for key, value in values.items():
             lines.append(f"{key} = {_toml_value(value)}")

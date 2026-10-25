@@ -69,6 +69,25 @@ class ProgressEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class PlaylistEntry:
+    """One flat entry from a playlist probe."""
+
+    url: str
+    title: str = ""
+    id: str = ""
+    uploader: str = ""
+    duration: float | None = None
+
+
+@dataclass(slots=True)
+class PlaylistInfo:
+    """A playlist title plus its (flat) entries."""
+
+    title: str
+    entries: list[PlaylistEntry]
+
+
+@dataclass(frozen=True, slots=True)
 class Section:
     """A time range (in seconds) to download from a longer video.
 
@@ -585,6 +604,78 @@ def probe(
     return info
 
 
+def probe_playlist(
+    url: str,
+    extra_args: list[str] | None = None,
+    *,
+    timeout: float = 180.0,
+    cancel_check: Callable[[], bool] | None = None,
+) -> PlaylistInfo:
+    """Fetch a playlist's flat entry list without extracting every video.
+
+    ``--flat-playlist`` keeps this fast for large playlists.  Entries are
+    queued as individual URLs; their formats are chosen from the active preset
+    or config when the queue starts.
+    """
+    cmd = [
+        "yt-dlp",
+        "-J",
+        "--flat-playlist",
+        "--yes-playlist",
+        "--no-warnings",
+        "--ignore-config",
+        "--no-config-locations",
+        "--no-exec",
+        "--socket-timeout",
+        "20",
+        *(extra_args or []),
+        url,
+    ]
+    returncode, stdout, stderr = _capture(cmd, timeout=timeout, cancel_check=cancel_check)
+    if returncode != 0:
+        message = _extract_error(stderr) or "Could not read that playlist"
+        raise _error_for(url, message)
+
+    import json
+
+    try:
+        raw = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        message = _extract_error(stderr) or "yt-dlp returned unreadable playlist data"
+        raise _error_for(url, message) from exc
+
+    raw_entries = raw.get("entries") if isinstance(raw, dict) else None
+    if not isinstance(raw_entries, list):
+        raise DownloadError("That URL is not a playlist", ErrorReason.NO_STREAMS)
+
+    entries: list[PlaylistEntry] = []
+    for entry in raw_entries:
+        if not isinstance(entry, dict):
+            continue
+        entry_id = str(entry.get("id") or "")
+        entry_url = str(entry.get("webpage_url") or entry.get("url") or "")
+        if not entry_url and entry_id:
+            entry_url = f"https://www.youtube.com/watch?v={entry_id}"
+        if not entry_url:
+            continue
+        entries.append(
+            PlaylistEntry(
+                url=entry_url,
+                title=str(entry.get("title") or entry_id or "Untitled"),
+                id=entry_id,
+                uploader=str(entry.get("uploader") or entry.get("channel") or ""),
+                duration=_to_float(str(entry.get("duration") or "")),
+            )
+        )
+
+    if not entries:
+        raise DownloadError("No playlist entries were found", ErrorReason.NO_STREAMS)
+    return PlaylistInfo(
+        title=str(raw.get("title") or "Playlist"),
+        entries=entries,
+    )
+
+
 def _extract_error(stderr: str) -> str:
     """Pull the most meaningful line out of yt-dlp's stderr."""
     lines = [ln.strip() for ln in (stderr or "").splitlines() if ln.strip()]
@@ -682,6 +773,7 @@ def _build_cmd(
         "--ignore-config",
         "--no-config-locations",
         "--no-exec",
+        "--continue",
         "--newline",
         "--no-quiet",
         "--progress-delta",

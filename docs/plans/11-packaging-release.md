@@ -14,9 +14,11 @@ changelog, release automation, and distribution channels.
 ## 2. Current state
 
 - `pyproject.toml` uses `uv_build`; entry point `yoinktui = yoinktui.__main__:main`.
-- Version `0.2.0` lives only in `pyproject.toml`; `__init__.__version__` reads it
+- Version `0.3.0` lives only in `pyproject.toml`; `__init__.__version__` reads it
   through `importlib.metadata` (verified: `uv_build` does not support dynamic
   version, so pyproject remains the source).
+- v0.2.0 and v0.3.0 are internal development milestones; no tag or public
+  release is created until v1.0.0.
 - `CHANGELOG.md`, `LICENSE` (MIT), classifiers, keywords, and project URLs are
   in place.
 - `uv build` produces an sdist + wheel; the wheel contains `tui/app.tcss` and

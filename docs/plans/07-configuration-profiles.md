@@ -1,9 +1,9 @@
 # Module 07 — Configuration & Profiles
 
-> Status: 🟡 P0 complete (v0.2.0) · Phase: 1 · Primary files: `app.py` (`AppConfig`),
-> `backend/config.py`
+> Status: 🟡 P1 presets complete (v0.3.0) · Phase: 1 · Primary files:
+> `backend/config.py` (`AppConfig`), `backend/presets.py`, `app.py` (re-export)
 >
-> Remaining unchecked items are P1 profiles/presets and schema migration.
+> Remaining unchecked items are config schema migration and the settings UI.
 
 ## 1. Purpose
 
@@ -21,8 +21,12 @@ containers, presets/profiles, defaults, and precedence rules.
   `--doctor`, plus policy/network/UI flags.
 - Invalid values warn and fall back to defaults; a malformed file never crashes.
 - Download dir defaults to `~/Videos/yoinktui/` and is created on startup.
-- Last URL is stored under `$XDG_STATE_HOME/yoinktui/state.json` until module 08.
-- Profiles/presets are not implemented yet (P1).
+- Last URL is stored under `$XDG_STATE_HOME/yoinktui/state.json`.
+- Built-in presets (`music`, `archive`, `mobile`) are merged with user-defined
+  `[presets.<name>]` tables; the format screen can apply a preset from a modal,
+  and the action bar shows the active profile.
+- `--print-config` and `--write-default-config` include the effective preset
+  tables, so the generated TOML documents the full policy.
 
 ## 3. Goals
 
@@ -70,7 +74,17 @@ cookies_from_browser = ""     # chrome | firefox | brave | …
 ascii = false
 no_color = false
 show_preview = true
+
+[presets.mobile]
+mode = "video"
+quality_cap = 720
+container = "mp4"
+audio_format = "m4a"
+description = "720p MP4/AAC for phones and tablets"
 ```
+
+Built-ins are `music`, `archive`, and `mobile`; a `[presets.<name>]` table
+overrides only the keys it sets and adds new presets alongside them.
 
 ### WS 07.2 — Loader & precedence — **[P0]**
 - [x] TOML loader with validation and helpful error messages.
@@ -79,9 +93,9 @@ show_preview = true
 - [x] `yoinktui --print-config` / `--write-default-config` (with module 09).
 
 ### WS 07.3 — Profiles / presets — **[P1]**
-- [ ] Named profiles selectable in the UI (mode + container + cap bundle).
-- [ ] Ship built-ins; allow user-defined profiles in config.
-- [ ] Show the active profile in the action bar.
+- [x] Named profiles selectable in the UI (mode + container + cap bundle).
+- [x] Ship built-ins; allow user-defined profiles in config.
+- [x] Show the active profile in the action bar.
 
 ### WS 07.4 — Migration & robustness — **[P1]**
 - [ ] Config schema version + migration on upgrade.

@@ -7,15 +7,18 @@ graph so tests and future screens stay consistent.
 
 ```text
 StartupErrorScreen            (only when yt-dlp/ffmpeg is missing)
-        │  quit
-        ▼
-UrlScreen ── probe ok ──▶ FormatScreen ── download ──▶ DownloadScreen
-    ▲                         │                            │
-    │◀──────── Esc/back ──────┘                            │
-    │◀────────────────────── finished / cancel ───────────┘
+
+UrlScreen
+├── probe → FormatScreen → DownloadScreen
+│            ├── ClipModal
+│            └── PresetModal
+├── playlist → PlaylistScreen → QueueScreen
+├── queue → QueueScreen → DownloadScreen (queue items)
+└── library → LibraryScreen
 ```
 
-Modals: `ClipModal` (from `FormatScreen`), `ErrorModal` (legacy fallback).
+Startup also opens `QueueScreen` when `queue.json` contains pending,
+interrupted, or failed items. `ErrorModal` is a legacy fallback.
 
 ## Escape semantics
 
@@ -24,6 +27,10 @@ Modals: `ClipModal` (from `FormatScreen`), `ErrorModal` (legacy fallback).
 | `UrlScreen` | Quit the app | `Ctrl+Q` and `Ctrl+C` also quit |
 | `FormatScreen` | Pop back to `UrlScreen` | The input is re-enabled and focused |
 | `DownloadScreen` | Cancel the running download | Press again / after finish to close |
+| `QueueScreen` | Pop back | Queue state is already persisted |
+| `PlaylistScreen` | Pop back without queueing | |
+| `LibraryScreen` | Pop back | |
+| `PresetModal` | Dismiss without applying | |
 | `ClipModal` | Dismiss without changing the clip | |
 | `ErrorModal` | Dismiss | |
 | `StartupErrorScreen` | Quit | Dependency problem cannot be fixed in-app |

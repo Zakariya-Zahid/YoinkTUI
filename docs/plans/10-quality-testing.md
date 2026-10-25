@@ -1,6 +1,6 @@
 # Module 10 — Quality: Tests, CI & Types
 
-> Status: 🟡 P0 complete (v0.2.0) · Phase: 0 · Primary files: `tests/`,
+> Status: 🟡 P0 complete (v0.2.0), v0.3.0 UI coverage · Phase: 0 · Primary files: `tests/`,
 > `pyproject.toml` tool config, `.github/workflows/`
 >
 > Remaining unchecked items are P1 coverage policy and the optional nightly
@@ -13,18 +13,21 @@ keep the codebase healthy as modules grow. This module **blocks** Phase 1 work.
 
 ## 2. Current state
 
-- **153 tests** across backend and TUI (`uv run pytest -q`): parser contract,
+- **216 tests** across backend and TUI (`uv run pytest -q`): parser contract,
   models/coercions, selectors + merge fallback, config loader/precedence,
-  command builder, process control, probe, timecode/clips, packaging,
-  formatters.
+  presets, queue persistence, SQLite history, command builder, process control,
+  probe/playlist probe, timecode/clips, markup escaping, packaging, formatters.
 - `ruff` (lint + format), `mypy`, `pre-commit`, and pytest config live in
   `pyproject.toml` / `.pre-commit-config.yaml`; all gates are green locally.
 - CI runs on Linux + macOS for Python 3.12/3.13, with a separate wheel-install
   job; snapshot artifacts upload on failure.
 - TUI tests cover startup, missing dependencies, URL validation, duplicate
-  submits, probe→format→download flows, Esc semantics, and the action bar.
-- 24 SVG snapshots cover `UrlScreen`, `FormatScreen`, `DownloadScreen`
-  (running/paused/complete), and `ErrorModal` across two themes and two sizes.
+  submits, probe→format→download flows, queue/library/playlist/preset flows,
+  Esc semantics, and the action bar.
+- **52 SVG snapshots** cover `UrlScreen`, `FormatScreen`, `DownloadScreen`
+  (running/paused/complete), multi-item download, queue, library, playlist,
+  preset modal, clip modal, startup error, and `ErrorModal` across two themes
+  and two sizes.
 - `docs/contracts/progress.md` and `navigation.md` (plus `selection.md`) are
   backed by tests.
 - Coverage is not measured yet (P1).
@@ -66,8 +69,9 @@ keep the codebase healthy as modules grow. This module **blocks** Phase 1 work.
 - [x] `run_test()` flow tests: submit URL (fake probe) → `FormatScreen` →
       start download (fake download) → dashboard states.
 - [x] Snapshot tests for `UrlScreen`, `FormatScreen`, `DownloadScreen`
-      (running/paused/complete), `ErrorModal`, across 2 themes + 2 sizes
-      (24 snapshots, clock/time frozen in tests).
+      (running/paused/complete), multi-item download, queue, library, playlist,
+      preset modal, clip modal, startup error, and `ErrorModal`, across 2 themes
+      + 2 sizes (52 snapshots, clock/time frozen in tests).
 - [x] Regression test for the action-bar buttons and probe status.
 
 ### WS 10.4 — CI — **[P0]**

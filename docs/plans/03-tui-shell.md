@@ -15,11 +15,16 @@ bindings, application state, and the URL-input entry point.
 - `YoinkTUIApp` pushes `UrlScreen` on mount; `CSS_PATH="tui/app.tcss"`.
 - Flow: `UrlScreen` → (`probe`) → `FormatScreen` → (`download`) → `DownloadScreen`
   → pop back to `FormatScreen`; `ErrorModal` for hard failures.
+- `UrlScreen` also opens `PlaylistScreen`, `QueueScreen`, and `LibraryScreen`;
+  `PlaylistScreen` can replace itself with `QueueScreen`, and startup opens the
+  queue automatically when resumable items exist.
 - `UrlScreen` shows an inline spinner while probing (no modal), disables the
   input, and validates/pastes-cleans URLs before probing.
 - `AppConfig` and `AppState` are **per-instance** values; `AppState` tracks the
-  last/current URL, current `MediaInfo`, selected format, and mode.
-- Last URL is persisted in a small state JSON and pre-filled on relaunch.
+  last/current URL, current `MediaInfo`, selected format, mode, and the
+  persistent `DownloadQueue`.
+- Last URL is persisted in a small state JSON and pre-filled on relaunch;
+  history and queue live in the module 08 stores.
 - Missing yt-dlp/ffmpeg opens `StartupErrorScreen` before the URL screen.
 - Duplicate-submit guards prevent stacked screens; focus is restored after pops.
 - The screen graph and Esc semantics are documented in
@@ -62,9 +67,12 @@ bindings, application state, and the URL-input entry point.
 - [ ] Central `notify()` service replacing per-screen `StatusToast`.
 
 ### WS 03.5 — Lifecycle & teardown — **[P1]**
-- [ ] Stop all timers/workers on screen unmount (spinner, elapsed tick).
-- [ ] Confirm-on-quit when a download is running (or detach to queue).
-- [ ] Handle terminal resize / tiny terminals without crashing (see 06, 12).
+- [x] Stop all timers/workers on screen unmount (probe cancellation, elapsed
+      tick guard, download process-group cancel).
+- [~] Quitting mid-download leaves an `interrupted` queue item/history record;
+      there is no confirm-on-quit dialog yet.
+- [~] Layouts are snapshot-tested at 100×30 and 120×40; sub-100-column handling
+      still needs work (see 06, 12).
 
 ## 5. Milestones
 

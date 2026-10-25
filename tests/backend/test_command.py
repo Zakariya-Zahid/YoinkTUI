@@ -30,6 +30,12 @@ def test_safety_and_reproducibility_flags() -> None:
     assert cmd[-1] == "https://example.com/video"
 
 
+def test_resume_flag_is_always_enabled() -> None:
+    cmd = _base_cmd()
+    assert "--continue" in cmd
+    assert "--no-overwrites" not in cmd
+
+
 def test_policy_flags_are_opt_in() -> None:
     cmd = _base_cmd()
     assert "--concurrent-fragments" not in cmd

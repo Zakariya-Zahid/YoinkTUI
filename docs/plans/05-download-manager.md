@@ -1,13 +1,15 @@
 # Module 05 — Download Manager & Queue
 
-> Status: 🟡 in progress · Phase: 2 · Primary files: `tui/widgets.py`
+> Status: 🟡 P1 queue complete (v0.3.0) · Phase: 2 · Primary files: `tui/widgets.py`
 > (`DownloadDashboard`, `DownloadQueueItem`, `StatTile`), `tui/screens.py`
-> (`DownloadScreen`)
+> (`DownloadScreen`, `QueueScreen`, `PlaylistScreen`), `backend/queue.py`
+>
+> Remaining unchecked items are single-item polish and P1/P2 automation.
 
 ## 1. Purpose
 
 Own the **download experience**: the Steam-style dashboard, per-stream queue,
-live stats, pause/resume/cancel, completion, and (later) multi-item queues.
+live stats, pause/resume/cancel, completion, and multi-item queue management.
 
 ## 2. Current state
 
@@ -18,7 +20,17 @@ live stats, pause/resume/cancel, completion, and (later) multi-item queues.
 - States: CONNECTING → DOWNLOADING → PAUSED → PROCESSING → COMPLETE/FAILED.
 - Two-pass (video then audio) overall progress; audio-only single pass.
 - On completion: `Cancel` becomes `Close`, auto-dismiss after 6 s.
-- One download at a time; no queue, no history write, no notifications.
+- `DownloadScreen` accepts a list of `QueueItem`s and processes them
+  sequentially; each item has its own policy snapshot and history record.
+- Multi-item mode adds a queue-aware item list above the per-stream rows, with
+  per-item status and current-item progress; one failure continues the queue.
+- `QueueScreen` reviews, retries, removes, clears, and starts/resumes queued
+  items; `PlaylistScreen` queues every entry from a flat playlist probe and can
+  apply Video+Audio, Video Only, or Audio Only to the whole batch.
+- Queue state is persisted to `$XDG_DATA_HOME/yoinktui/queue.json`; running
+  items become `interrupted` on restart and are offered for resume.
+- Completion writes history through `LibraryStore`; pause/resume/cancel are
+  still single-item controls (no per-item cancel or concurrency yet).
 
 ## 3. Goals
 
@@ -31,24 +43,28 @@ live stats, pause/resume/cancel, completion, and (later) multi-item queues.
 ## 4. Workstreams
 
 ### WS 05.1 — Single-item polish — **[P0]**
-- [ ] Pause button disabled while `PROCESSING` (no-op today is confusing).
+- [x] Pause button disabled while `PROCESSING` / finished.
 - [ ] Speed sparkline / history for the last N seconds (visual rate context).
 - [ ] "Open folder" / "Copy path" actions on completion.
-- [ ] Persist the last download result into history (module 08).
-- [ ] Keep elapsed ticking consistent with real progress; freeze on pause if desired.
+- [x] Persist the last download result into history (module 08).
+- [x] Keep elapsed ticking consistent with real progress; paused time is
+      excluded and the clock resets per queue item (post-processing covered).
 
 ### WS 05.2 — Queue model — **[P1]**
-- [ ] `DownloadQueue` in the shell/backend with items: pending/running/done/failed.
-- [ ] One worker processes items sequentially; per-item retry/skip/cancel.
-- [ ] Queue-aware dashboard: item list with statuses, current item highlighted.
-- [ ] Playlist expansion (`--yes-playlist`) feeding the queue.
-- [ ] Persist the queue so an interrupted app can resume (module 08).
+- [x] `DownloadQueue` in the shell/backend with items: pending/running/done/failed.
+- [~] One worker processes items sequentially; failures continue the queue.
+      Retry is available from `QueueScreen`; per-item skip/cancel is not.
+- [x] Queue-aware dashboard: item list with statuses, current item highlighted.
+- [x] Playlist expansion (`--flat-playlist` probe) feeding the queue.
+- [x] Playlist queue modes (Video+Audio, Video Only, Audio Only).
+- [x] Persist the queue so an interrupted app can resume (module 08).
 
 ### WS 05.3 — Controls & automation — **[P1]**
 - [ ] Optional concurrency (N active items) with a global vs. per-item limit.
-- [ ] Global rate limit / scheduled start / "download later".
+- [~] Global rate limit is config-driven; scheduled start / "download later" is not.
 - [ ] Notifications on completion (desktop notify, module 09 hook).
-- [ ] Keyboard: reorder queue, retry all failed, clear finished.
+- [~] Clear finished / remove selected / retry all failed via `QueueScreen`;
+      keyboard reordering is not implemented.
 
 ### WS 05.4 — Diagnostics in the dashboard — **[P2]**
 - [ ] Show the exact yt-dlp command (debug panel, opt-in).

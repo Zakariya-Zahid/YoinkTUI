@@ -12,8 +12,9 @@ from yoinktui.backend.ytdlp import DependencyReport, DependencyStatus
 
 @pytest.fixture(autouse=True)
 def isolated_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Never read or write the developer's real last-URL state."""
+    """Never read or write the developer's real state, history, or queue."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     # Snapshots and theme tests must not depend on the developer's NO_COLOR.
     monkeypatch.delenv("NO_COLOR", raising=False)
 

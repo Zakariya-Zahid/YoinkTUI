@@ -17,6 +17,14 @@ TUI download manager for YouTube (and 1000+ sites) via **yt-dlp** + **ffmpeg**.
 - **Clip downloads** — pick a start/end range to grab just the useful part of a long podcast or tutorial
 - **Steam-style download manager** — per-stream queue, live speed/ETA/peak/disk tiles,
   overall progress, pause/resume, cancel, and a timestamped activity log
+- **Persistent queue** — add several items, review/retry/remove them, and resume
+  interrupted or failed downloads after a restart
+- **Playlist support** — preview a playlist, choose Video+Audio, Video Only, or
+  Audio Only, and queue every entry sequentially
+- **History & library** — SQLite-backed history with search, details, open
+  file/folder, copy URL, re-download, and delete
+- **Presets** — built-in Music, Archive, and Mobile profiles plus your own
+  `[presets.<name>]` bundles, selectable from the format screen
 - **Config file** — quality cap, container, audio format, fragment concurrency,
   rate limit, metadata/thumbnail embedding, output directory, and defaults
 - **Trustworthy failures** — typed errors with hints, startup dependency checks,
@@ -81,8 +89,10 @@ startup screen instead of a traceback.
 1. **Paste a URL** — YouTube, Twitter/X, Vimeo, Twitch, TikTok, etc.
 2. **Pick a format** — Table shows video & audio streams; arrow keys navigate, Enter selects
 3. **Choose mode** — `Video+Audio` (default), `Video Only`, `Audio Only`
-4. **Optional clip** — press `C`, enter a start/end range, then Apply. Leave end blank to go to the end of the video.
-5. **Download** — Steam-style dashboard with queue, stats, and activity log
+4. **Optional preset** — open the preset modal to apply Music, Archive, Mobile, or a user-defined bundle
+5. **Optional clip** — press `C`, enter a start/end range, then Apply. Leave end blank to go to the end of the video.
+6. **Download or queue** — start immediately, or add the item to the persistent queue. Playlist URLs can queue every entry as video+audio, video only, or audio only.
+7. **Resume / browse** — pending, interrupted, and failed queue items are offered on startup; the Library screen searches and acts on history.
 
 ## Configuration
 
@@ -128,7 +138,21 @@ cookies_from_browser = ""
 show_preview = true
 ascii = false
 no_color = false
+
+# Built-ins are music, archive, and mobile. Override only the keys you want,
+# or add a new preset name.
+[presets.phone]
+mode = "video"
+quality_cap = 480
+container = "mp4"
+audio_format = "m4a"
+description = "Small MP4 for an older phone"
 ```
+
+Presets bundle mode, quality cap, container, audio format, and post-processing
+switches. Apply one from the format screen; the action bar shows the active
+profile. Built-ins can be overridden with `[presets.music]`,
+`[presets.archive]`, or `[presets.mobile]`.
 
 Environment overrides use the same names with a `YOINKTUI_` prefix:
 `YOINKTUI_DOWNLOAD_DIR`, `YOINKTUI_QUALITY_CAP`, `YOINKTUI_CONTAINER`,
@@ -151,6 +175,20 @@ yoinktui --concurrent-fragments 4 --rate-limit 5M
 
 Defaults: 1080p cap, `mkv`, `mp3`, `~/Videos/yoinktui`.
 
+### Data and resume
+
+Runtime data lives under `$XDG_DATA_HOME/yoinktui/` (usually
+`~/.local/share/yoinktui/`):
+
+- `queue.json` — persistent download queue; pending, interrupted, and failed
+  items are offered for resume on startup.
+- `library.db` — SQLite download history used by the Library screen.
+
+Downloads use yt-dlp `--continue`, so a partially written `.part` file resumes
+where it left off. Quitting mid-download records the active item as
+`interrupted` in history; queued downloads are offered for resume on the next
+launch.
+
 ### Cookies and proxy
 
 Some sites need a logged-in browser session or a different network:
@@ -164,6 +202,13 @@ yoinktui --cookies-from-browser "firefox:/path/to/profile" \
 The same values can live in `[network]`. Use the same browser names as
 yt-dlp: `chrome`, `firefox`, `edge`, `brave`, or `browser:profile`. Extra
 yt-dlp flags can be passed with `--yt-dlp-arg=...` (repeatable).
+
+### Udemy courses and lectures
+
+Udemy needs a logged-in session and usually browser impersonation. The course
+is the playlist, while individual lectures are the videos. See
+[docs/guides/udemy.md](docs/guides/udemy.md) for cookie export, URL forms,
+whole-course queueing, audio-only mode, and DRM limitations.
 
 ### TikTok / HTTP 403
 
@@ -180,6 +225,7 @@ may work later without changes.
 | `Enter` | Submit URL / Select format |
 | `↑/↓` | Navigate format table |
 | `D` | Download the selected format |
+| `Q` | Add the selected format to the queue |
 | `C` | Set a clip start/end range |
 | `V` / `O` / `A` | Video+Audio / Video Only / Audio Only |
 | `Esc` | Back, cancel download, or quit from the URL screen |
@@ -197,16 +243,20 @@ src/yoinktui/
 ├── assets/              # App logo (light & dark variants)
 ├── backend/
 │   ├── config.py        # TOML schema, loader, XDG paths, last-URL state
+│   ├── presets.py       # built-in Music/Archive/Mobile bundles
+│   ├── queue.py         # DownloadQueue, QueueItem, atomic JSON persistence
+│   ├── library.py       # SQLite history, search, stats, interrupted recovery
 │   ├── errors.py        # DownloadError + ErrorReason taxonomy
 │   ├── models.py        # MediaInfo, FormatInfo, numeric coercions
-│   └── ytdlp.py         # probe/download, progress contract, process control
+│   └── ytdlp.py         # probe/playlist probe/download, process control
 └── tui/
     ├── app.tcss         # All styles (Textual 8 compatible)
-    ├── widgets.py       # FormatTable, InfoPanel, ThumbnailCard, DownloadDashboard
-    └── screens.py       # UrlScreen, FormatScreen, DownloadScreen, modals
+    ├── widgets.py       # FormatTable, InfoPanel, DownloadDashboard, queue rows
+    └── screens.py       # URL/format/download/queue/playlist/library + modals
 tests/
-├── backend/             # parser, models, config, selectors, command, control
-└── tui/                 # smoke, flow, URL validation, SVG snapshots
+├── backend/             # parser, models, config, queue, history, presets
+└── tui/                 # smoke, flow, URL validation, power-user flows, snapshots
+docs/adr/                # architecture decisions (history store)
 docs/contracts/          # frozen progress, selection, and navigation contracts
 ```
 

@@ -80,7 +80,7 @@ Phases overlap deliberately — modules advance independently.
 | 05 | Download Manager & Queue | [05-download-manager](docs/plans/05-download-manager.md) | 🟡 | 2 |
 | 06 | Theming, A11y & Keybindings | [06-theming-accessibility](docs/plans/06-theming-accessibility.md) | 🔴 | 4 |
 | 07 | Configuration & Profiles | [07-configuration-profiles](docs/plans/07-configuration-profiles.md) | 🟡 | 1 |
-| 08 | History, Library & Persistence | [08-history-library](docs/plans/08-history-library.md) | ⚪ | 2 |
+| 08 | History, Library & Persistence | [08-history-library](docs/plans/08-history-library.md) | 🟡 | 2 |
 | 09 | CLI & Automation | [09-cli-automation](docs/plans/09-cli-automation.md) | ⚪ | 3 |
 | 10 | Quality: Tests, CI & Types | [10-quality-testing](docs/plans/10-quality-testing.md) | 🟡 | 0 |
 | 11 | Packaging, Release & Distribution | [11-packaging-release](docs/plans/11-packaging-release.md) | 🟡 | 0 |
@@ -90,21 +90,23 @@ Phases overlap deliberately — modules advance independently.
 
 ## 6. Release milestones
 
-### v0.2.0 — "Trustworthy" — ✅ implemented, pending tag
+### v0.2.0 — "Trustworthy" — ✅ implemented, unreleased internal milestone
 - All `P0` tasks in modules 01, 02, 03, 07, 10, 11.
 - Typed error taxonomy + startup dependency checks (yt-dlp/ffmpeg).
 - Config file (`~/.config/yoinktui/config.toml`) with output dir, quality cap,
   container, audio codec.
-- Test suite (unit + parser + smoke + 24 snapshots) and CI on Linux + macOS.
+- Test suite (unit + parser + smoke + snapshots) and CI on Linux + macOS.
 - README corrected to the real architecture.
 
 See [`CHANGELOG.md`](CHANGELOG.md) and [`docs/RELEASING.md`](docs/RELEASING.md).
 
-### v0.3.0 — "Power user"
-- Queue / playlist support and multi-item dashboard.
-- Persistent history + library browse screen.
-- Presets (e.g. *Music*, *Archive*, *Mobile*) and resume interrupted downloads.
-- Snapshot tests for every screen.
+### v0.3.0 — "Power user" — ✅ implemented, unreleased internal milestone
+- [x] Queue / playlist support and multi-item dashboard.
+- [x] Persistent history + library browse screen.
+- [x] Presets (*Music*, *Archive*, *Mobile*) and resume pending, interrupted, or failed downloads.
+- [x] Snapshot tests for every screen.
+
+The first public release and tag remain v1.0.0.
 
 ### v1.0.0 — "Product"
 - CLI flags + headless mode.

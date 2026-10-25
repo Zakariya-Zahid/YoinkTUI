@@ -46,13 +46,15 @@ Header {
     background: $surface-raised;
     color: $accent;
     text-style: bold;
-    border-bottom: solid $border;
 }
 
 Footer {
     background: $surface-raised;
     color: $text-muted;
-    border-top: solid $border;
+}
+
+Button:focus {
+    text-style: bold underline;
 }
 
 /* --- Widgets ----------------------------------------------------------- */
@@ -130,8 +132,9 @@ FormatTable > .datatable--odd-row {
 
 .ActionBar Button {
     width: auto;
-    min-width: 10;
+    min-width: 8;
     margin: 0 1 0 0;
+    padding: 0 1;
 }
 
 .action-spacer {
@@ -205,7 +208,7 @@ ThumbnailCard.-error {
 }
 
 InfoPanel {
-    margin: 0 2;
+    margin: 0 1;
     padding: 1;
     background: $surface-raised;
     border: solid $border;
@@ -279,18 +282,23 @@ ModalButtons Button {
 
 /* --- Screen-specific styles -------------------------------------------- */
 
-/* UrlScreen */
-UrlScreen {
+/* UrlScreen / startup error */
+UrlScreen,
+StartupErrorScreen {
     layout: vertical;
     align: center middle;
 }
-UrlScreen .center-box {
+UrlScreen .center-box,
+StartupErrorScreen .center-box {
     width: 80;
     max-width: 90%;
+    height: auto;
+    max-height: 90%;
     background: $surface-raised;
     border: thick $accent;
     padding: 1 3;
     layout: vertical;
+    overflow: hidden;
 }
 UrlScreen .logo-wrap {
     width: 100%;
@@ -302,7 +310,8 @@ UrlScreen .logo {
     width: 36;
     height: auto;
 }
-UrlScreen .title {
+UrlScreen .title,
+StartupErrorScreen .title {
     text-style: bold;
     color: $accent;
     margin-bottom: 0;
@@ -313,10 +322,29 @@ UrlScreen .version {
     margin-bottom: 1;
     content-align: center middle;
 }
-UrlScreen .subtitle {
+UrlScreen .subtitle,
+StartupErrorScreen .subtitle {
     color: $text-muted;
     margin-bottom: 1;
     content-align: center middle;
+}
+StartupErrorScreen .title {
+    margin-bottom: 1;
+}
+StartupErrorScreen .message {
+    color: $text;
+    margin-bottom: 1;
+}
+UrlScreen .url-actions {
+    height: 3;
+    layout: horizontal;
+    align: center middle;
+    margin-top: 1;
+}
+UrlScreen .url-actions Button {
+    width: auto;
+    min-width: 12;
+    margin: 0 1;
 }
 
 /* Inline probe status */
@@ -338,20 +366,16 @@ FormatScreen {
 }
 FormatScreen .top-row {
     layout: horizontal;
-    border: solid red;
     height: 1fr;
-    min-height: 22;
+    min-height: 18;
 }
 FormatScreen .left-pane {
     width: 1fr;
-
-    border:solid white;
 }
 FormatScreen .right-pane {
-    width: 60;
-    min-width: 60;
-
-    border:solid white;
+    width: 40%;
+    min-width: 38;
+    max-width: 60;
 }
 
 /* DownloadScreen — Steam-style download manager */
@@ -359,11 +383,126 @@ DownloadScreen {
     layout: vertical;
 }
 
+/* Playlist / queue / library pages */
+PlaylistScreen,
+QueueScreen,
+LibraryScreen {
+    layout: vertical;
+}
+.page {
+    width: 100%;
+    height: 1fr;
+    padding: 1 2;
+    background: $surface-raised;
+    border: thick $accent;
+    layout: vertical;
+}
+.page-kicker {
+    height: 1;
+    color: $accent;
+    text-style: bold;
+}
+.page-title {
+    height: 2;
+    color: $text;
+    text-style: bold;
+}
+.page-subtitle {
+    height: 1;
+    color: $text-muted;
+    margin-bottom: 1;
+}
+.page-actions {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-top: 1;
+}
+.page-actions Button {
+    width: auto;
+    min-width: 11;
+    margin: 0 1 0 0;
+}
+.page DataTable {
+    height: 1fr;
+    background: $surface;
+    border: solid $border;
+}
+.playlist-page DataTable,
+.queue-page DataTable {
+    min-height: 8;
+}
+.library-page #library-search {
+    height: 3;
+    margin-bottom: 1;
+    border: tall $border;
+    background: $surface;
+    color: $text;
+    padding: 0 1;
+}
+.library-detail {
+    height: auto;
+    max-height: 5;
+    padding: 0 1;
+    margin-top: 1;
+    color: $text-muted;
+    border-left: thick $accent;
+}
+
+/* Preset modal */
+PresetModal {
+    align: center middle;
+}
+PresetModal .dialog {
+    width: 100;
+    max-width: 94%;
+    height: auto;
+    max-height: 90%;
+    background: $surface-raised;
+    border: thick $accent;
+    padding: 1 3;
+    overflow-y: auto;
+}
+PresetModal .title {
+    color: $accent;
+    text-style: bold;
+}
+PresetModal .clip-hint {
+    color: $text-muted;
+    height: auto;
+    min-height: 1;
+    margin-bottom: 1;
+}
+PresetModal DataTable {
+    height: auto;
+    max-height: 14;
+    background: $surface;
+    border: solid $border;
+}
+PresetModal .clip-actions {
+    height: 3;
+    layout: horizontal;
+    align: right middle;
+    margin-top: 1;
+}
+PresetModal .clip-actions Button {
+    width: auto;
+    margin-left: 1;
+}
+
+ErrorModal {
+    align: center middle;
+    background: $background 60%;
+}
 ErrorModal .dialog {
     width: 70;
+    max-width: 90%;
+    height: auto;
+    max-height: 90%;
     background: $surface-raised;
     border: thick $error;
     padding: 2 3;
+    overflow-y: auto;
 }
 ErrorModal .message {
     margin-bottom: 1;
@@ -390,7 +529,8 @@ ClipModal .title {
 }
 ClipModal .clip-hint {
     color: $text-muted;
-    height: 1;
+    height: auto;
+    min-height: 1;
 }
 ClipModal .clip-row {
     layout: horizontal;
@@ -427,12 +567,13 @@ ClipModal .clip-presets Button {
 }
 ClipModal .clip-precise {
     layout: horizontal;
-    height: 1;
+    height: auto;
+    min-height: 1;
     align: left middle;
 }
 ClipModal Switch {
-    width: 8;
-    height: 1;
+    width: auto;
+    height: 3;
 }
 ClipModal .clip-precise .clip-hint {
     margin-left: 1;
@@ -440,7 +581,8 @@ ClipModal .clip-precise .clip-hint {
 }
 ClipModal .clip-error {
     color: $error;
-    height: 1;
+    height: auto;
+    min-height: 1;
 }
 ClipModal .clip-actions {
     layout: horizontal;
@@ -456,9 +598,12 @@ ClipModal .clip-actions Button {
 /* StatusToast */
 StatusToast {
     width: 100%;
-    height: auto;
-    min-height: 2;
-    max-height: 3;
+    height: 4;
+    min-height: 4;
+    max-height: 4;
+    overflow: hidden;
+    scrollbar-size-vertical: 0;
+    scrollbar-size-horizontal: 0;
     background: $surface-raised;
     border: solid $border;
 }
@@ -474,7 +619,7 @@ ModalDialog {
 
 /* ThumbnailCard */
 ThumbnailCard {
-    width: 60;
+    width: 100%;
     height: 18;
     content-align: center middle;
     border-title-color: $accent;

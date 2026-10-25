@@ -12,13 +12,29 @@ from textual.widgets import _header as header_module
 
 import yoinktui.tui.widgets as widgets
 from yoinktui.backend.config import AppConfig
+from yoinktui.backend.library import HistoryRecord
 from yoinktui.backend.models import FormatInfo, MediaInfo
-from yoinktui.backend.ytdlp import ProgressEvent
+from yoinktui.backend.presets import builtin_presets
+from yoinktui.backend.queue import DownloadQueue, QueueItem
+from yoinktui.backend.ytdlp import (
+    DependencyReport,
+    DependencyStatus,
+    PlaylistEntry,
+    PlaylistInfo,
+    ProgressEvent,
+    Section,
+)
 from yoinktui.tui import screens
 from yoinktui.tui.screens import (
+    ClipModal,
     DownloadScreen,
     ErrorModal,
     FormatScreen,
+    LibraryScreen,
+    PlaylistScreen,
+    PresetModal,
+    QueueScreen,
+    StartupErrorScreen,
     UrlScreen,
 )
 
@@ -113,6 +129,203 @@ class ErrorSnapshotApp(App):
             ErrorModal(
                 "Network error: connection timed out.\n\n"
                 "Hint: check your internet connection and retry."
+            )
+        )
+
+
+class QueueSnapshotApp(App):
+    CSS_PATH = str(_CSS)
+
+    def __init__(self, theme: str) -> None:
+        super().__init__()
+        self.theme = theme
+        self.config = AppConfig(show_preview=False, download_dir=Path("/tmp"))
+        self.queue = DownloadQueue(
+            items=[
+                QueueItem(
+                    url="https://example.com/one",
+                    title="First download",
+                    mode="video",
+                    status="done",
+                ),
+                QueueItem(
+                    url="https://example.com/two",
+                    title="Second download",
+                    mode="audio",
+                    status="interrupted",
+                ),
+                QueueItem(
+                    url="https://example.com/three",
+                    title="Third download",
+                    mode="video",
+                    status="pending",
+                ),
+            ]
+        )
+
+    def on_mount(self) -> None:
+        self.push_screen(QueueScreen(queue=self.queue))
+
+
+class _FakeLibrary:
+    def __init__(self) -> None:
+        self.records = [
+            HistoryRecord(
+                id=1,
+                url="https://example.com/one",
+                title="A finished download",
+                status="done",
+                size=48_000_000,
+                started_at="2026-10-23T12:00:00+00:00",
+                # /proc exists but this subdirectory cannot, so the
+                # missing-file detail is deterministic on every machine.
+                path="/proc/yoinktui-snapshot/a-finished-download.mp4",
+                mode="video",
+            ),
+            HistoryRecord(
+                id=2,
+                url="https://example.com/two",
+                title="An interrupted download",
+                status="interrupted",
+                started_at="2026-10-22T12:00:00+00:00",
+                error_reason="Interrupted before completion",
+                mode="video",
+            ),
+        ]
+
+    def list_records(self, query: str = "", *, limit: int = 500) -> list[HistoryRecord]:
+        needle = query.lower()
+        return [
+            record
+            for record in self.records
+            if not needle or needle in record.title.lower() or needle in record.url.lower()
+        ][:limit]
+
+    def delete(self, record_id: int) -> None:
+        self.records = [record for record in self.records if record.id != record_id]
+
+
+class LibrarySnapshotApp(App):
+    CSS_PATH = str(_CSS)
+
+    def __init__(self, theme: str) -> None:
+        super().__init__()
+        self.theme = theme
+        self.config = AppConfig(show_preview=False)
+        self.library = _FakeLibrary()
+
+    def on_mount(self) -> None:
+        self.push_screen(LibraryScreen(store=self.library))  # type: ignore[arg-type]
+
+
+class PlaylistSnapshotApp(App):
+    CSS_PATH = str(_CSS)
+
+    def __init__(self, theme: str) -> None:
+        super().__init__()
+        self.theme = theme
+        self.config = AppConfig(show_preview=False)
+        self.playlist = PlaylistInfo(
+            title="A snapshot playlist",
+            entries=[
+                PlaylistEntry(
+                    url="https://example.com/one",
+                    title="Episode one",
+                    id="one",
+                    uploader="Channel",
+                    duration=125,
+                ),
+                PlaylistEntry(
+                    url="https://example.com/two",
+                    title="Episode two",
+                    id="two",
+                    uploader="Channel",
+                    duration=95,
+                ),
+            ],
+        )
+
+    def on_mount(self) -> None:
+        self.push_screen(PlaylistScreen(self.playlist))
+
+
+class PresetSnapshotApp(App):
+    CSS_PATH = str(_CSS)
+
+    def __init__(self, theme: str) -> None:
+        super().__init__()
+        self.theme = theme
+        self.config = AppConfig(show_preview=False)
+
+    def on_mount(self) -> None:
+        self.push_screen(PresetModal(builtin_presets()))
+
+
+class ClipSnapshotApp(App):
+    CSS_PATH = str(_CSS)
+
+    def __init__(self, theme: str) -> None:
+        super().__init__()
+        self.theme = theme
+        self.config = AppConfig(show_preview=False)
+
+    def on_mount(self) -> None:
+        self.push_screen(ClipModal(125, Section(start=10, end=50, precise=True)))
+
+
+class StartupSnapshotApp(App):
+    CSS_PATH = str(_CSS)
+
+    def __init__(self, theme: str) -> None:
+        super().__init__()
+        self.theme = theme
+        self.config = AppConfig(show_preview=False)
+        self.report = DependencyReport(
+            (
+                DependencyStatus("yt-dlp", "", "", False),
+                DependencyStatus("ffmpeg", "/usr/bin/ffmpeg", "7.1", True),
+            )
+        )
+
+    def on_mount(self) -> None:
+        self.push_screen(StartupErrorScreen(self.report))
+
+
+class MultiDownloadSnapshotApp(App):
+    CSS_PATH = str(_CSS)
+
+    def __init__(self, theme: str) -> None:
+        super().__init__()
+        self.theme = theme
+        self.config = AppConfig(show_preview=False, download_dir=Path("/tmp"))
+
+    def on_mount(self) -> None:
+        self.push_screen(
+            FrozenDownloadScreen(
+                items=[
+                    QueueItem(
+                        url="https://example.com/one",
+                        title="First item",
+                        selector="bv*+ba/b",
+                        out_template="/tmp/first.%(ext)s",
+                        mode="video",
+                    ),
+                    QueueItem(
+                        url="https://example.com/two",
+                        title="Second item",
+                        selector="ba/b",
+                        out_template="/tmp/second.%(ext)s",
+                        mode="audio",
+                        extract_audio=True,
+                    ),
+                    QueueItem(
+                        url="https://example.com/three",
+                        title="Third item",
+                        selector="bv*+ba/b",
+                        out_template="/tmp/third.%(ext)s",
+                        mode="video",
+                    ),
+                ]
             )
         )
 
@@ -245,3 +458,57 @@ def test_download_screen_snapshot(
 @pytest.mark.parametrize("size", SIZES)
 def test_error_modal_snapshot(snap_compare, frozen_time, theme: str, size: tuple[int, int]) -> None:
     assert snap_compare(ErrorSnapshotApp(theme=theme), terminal_size=size)
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES)
+def test_queue_screen_snapshot(
+    snap_compare, frozen_time, theme: str, size: tuple[int, int]
+) -> None:
+    assert snap_compare(QueueSnapshotApp(theme=theme), terminal_size=size)
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES)
+def test_library_screen_snapshot(
+    snap_compare, frozen_time, theme: str, size: tuple[int, int]
+) -> None:
+    assert snap_compare(LibrarySnapshotApp(theme=theme), terminal_size=size)
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES)
+def test_playlist_screen_snapshot(
+    snap_compare, frozen_time, theme: str, size: tuple[int, int]
+) -> None:
+    assert snap_compare(PlaylistSnapshotApp(theme=theme), terminal_size=size)
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES)
+def test_preset_modal_snapshot(
+    snap_compare, frozen_time, theme: str, size: tuple[int, int]
+) -> None:
+    assert snap_compare(PresetSnapshotApp(theme=theme), terminal_size=size)
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES)
+def test_clip_modal_snapshot(snap_compare, frozen_time, theme: str, size: tuple[int, int]) -> None:
+    assert snap_compare(ClipSnapshotApp(theme=theme), terminal_size=size)
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES)
+def test_startup_error_snapshot(
+    snap_compare, frozen_time, theme: str, size: tuple[int, int]
+) -> None:
+    assert snap_compare(StartupSnapshotApp(theme=theme), terminal_size=size)
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES)
+def test_multi_item_download_snapshot(
+    snap_compare, frozen_time, theme: str, size: tuple[int, int]
+) -> None:
+    assert snap_compare(MultiDownloadSnapshotApp(theme=theme), terminal_size=size)

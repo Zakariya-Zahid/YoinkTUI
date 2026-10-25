@@ -13,11 +13,22 @@ from yoinktui.backend.config import (
     write_default_config,
 )
 from yoinktui.backend.errors import BackendError, DownloadError, ErrorReason, classify_error
+from yoinktui.backend.library import HistoryRecord, LibraryStore
 from yoinktui.backend.models import FormatInfo, MediaInfo
+from yoinktui.backend.presets import Preset, builtin_presets
+from yoinktui.backend.queue import (
+    DownloadPolicy,
+    DownloadQueue,
+    QueueItem,
+    QueueStore,
+    safe_filename,
+)
 from yoinktui.backend.ytdlp import (
     DependencyReport,
     DependencyStatus,
     DownloadControl,
+    PlaylistEntry,
+    PlaylistInfo,
     ProgressEvent,
     Section,
     audio_selector,
@@ -26,6 +37,7 @@ from yoinktui.backend.ytdlp import (
     format_timecode,
     parse_timecode,
     probe,
+    probe_playlist,
     resolve_merge_format,
     section_slug,
     section_spec,
@@ -42,12 +54,22 @@ __all__ = [
     "DependencyStatus",
     "DownloadControl",
     "DownloadError",
+    "DownloadPolicy",
+    "DownloadQueue",
     "ErrorReason",
     "FormatInfo",
+    "HistoryRecord",
+    "LibraryStore",
     "MediaInfo",
+    "PlaylistEntry",
+    "PlaylistInfo",
+    "Preset",
     "ProgressEvent",
+    "QueueItem",
+    "QueueStore",
     "Section",
     "audio_selector",
+    "builtin_presets",
     "check_dependencies",
     "classify_error",
     "config_dir",
@@ -59,7 +81,9 @@ __all__ = [
     "load_config",
     "parse_timecode",
     "probe",
+    "probe_playlist",
     "resolve_merge_format",
+    "safe_filename",
     "section_slug",
     "section_spec",
     "state_dir",

@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import contextlib
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from textual.app import App
 from textual.binding import Binding
 
 from yoinktui.backend.config import AppConfig, load_config, load_last_url
+from yoinktui.backend.library import LibraryStore
 from yoinktui.backend.models import FormatInfo, MediaInfo
+from yoinktui.backend.queue import DownloadQueue, QueueStore
 from yoinktui.backend.ytdlp import DependencyReport, check_dependencies
-from yoinktui.tui.screens import StartupErrorScreen, UrlScreen
+from yoinktui.tui.screens import QueueScreen, StartupErrorScreen, UrlScreen
 
 __all__ = ["AppConfig", "AppState", "YoinkTUIApp", "load_config"]
 
@@ -22,8 +24,8 @@ class AppState:
     """Runtime state shared between screens.
 
     Kept per app instance so tests (and future windows) never share mutable
-    globals.  Durable history lives in module 08; the last URL is the one
-    small piece persisted today.
+    globals.  Durable history and the queue live in the backend stores; this
+    object carries the in-memory queue and the last URL used by the screens.
     """
 
     last_url: str = ""
@@ -31,6 +33,7 @@ class AppState:
     current_info: MediaInfo | None = None
     selected_format: FormatInfo | None = None
     mode: str = "video"
+    queue: DownloadQueue = field(default_factory=DownloadQueue)
 
 
 class YoinkTUIApp(App):
@@ -63,7 +66,20 @@ class YoinkTUIApp(App):
                 else:
                     os.environ["NO_COLOR"] = previous_no_color
         self.config = resolved
-        self.state = state or AppState(last_url=load_last_url())
+        try:
+            self.library = LibraryStore()
+            self.library.mark_interrupted()
+        except Exception as exc:  # pragma: no cover - filesystem edge case
+            self.library = LibraryStore(":memory:")
+            self.config.warnings.append(f"History is unavailable: {exc}")
+        self.queue_store = QueueStore()
+        if state is None:
+            self.state = AppState(
+                last_url=load_last_url(),
+                queue=self.queue_store.load(),
+            )
+        else:
+            self.state = state
         self.dependency_report: DependencyReport | None = None
         try:
             self.config.download_dir.mkdir(parents=True, exist_ok=True)
@@ -78,8 +94,10 @@ class YoinkTUIApp(App):
             self.push_screen(StartupErrorScreen(report))
             return
         for warning in (*report.warnings, *self.config.warnings):
-            self.notify(warning, severity="warning", timeout=10)
+            self.notify(warning, severity="warning", timeout=10, markup=False)
         self.push_screen(UrlScreen())
+        if self.state.queue.has_resumable():
+            self.push_screen(QueueScreen(queue=self.state.queue))
 
     def _apply_theme(self) -> None:
         theme = (self.config.theme or "").strip()
@@ -97,6 +115,7 @@ class YoinkTUIApp(App):
                 self.notify(
                     f"Unknown theme {theme!r}; keeping the default.",
                     severity="warning",
+                    markup=False,
                 )
 
     def action_toggle_dark(self) -> None:
@@ -109,4 +128,13 @@ class YoinkTUIApp(App):
             if callable(cancel):
                 with contextlib.suppress(Exception):
                     cancel()
+        self.queue_store.save(self.state.queue)
+        with contextlib.suppress(Exception):
+            self.library.close()
         self.exit()
+
+    def on_unmount(self) -> None:
+        """Flush the queue and close history for exits that bypass action_quit."""
+        self.queue_store.save(self.state.queue)
+        with contextlib.suppress(Exception):
+            self.library.close()
