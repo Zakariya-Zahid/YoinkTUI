@@ -20,7 +20,7 @@ from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen, Screen
 from textual.timer import Timer
-from textual.widgets import Button, DataTable, Footer, Header, Input, Static, Switch
+from textual.widgets import Button, DataTable, Footer, Header, Input, Select, Static, Switch
 from textual_image.widget import AutoImage
 
 from yoinktui.backend.config import AppConfig, load_last_url, save_last_url
@@ -32,6 +32,7 @@ from yoinktui.backend.queue import DownloadPolicy, DownloadQueue, QueueItem, Que
 from yoinktui.backend.ytdlp import (
     DependencyReport,
     DownloadControl,
+    PlaylistEntry,
     PlaylistInfo,
     ProgressEvent,
     Section,
@@ -46,6 +47,7 @@ from yoinktui.tui.widgets import (
     DownloadDashboard,
     FormatTable,
     InfoPanel,
+    SelectableTable,
     StatusToast,
     ThumbnailCard,
     UrlInput,
@@ -592,6 +594,56 @@ class PresetModal(ModalScreen[str | None]):
         self.dismiss(None)
 
 
+class ConfirmModal(ModalScreen[bool]):
+    """Small confirmation dialog for destructive actions."""
+
+    BINDINGS = [
+        ("escape", "cancel", "Cancel"),
+        ("n", "cancel", "Cancel"),
+        ("y", "confirm", "Confirm"),
+    ]
+
+    def __init__(
+        self,
+        title: str,
+        message: str,
+        *,
+        confirm_label: str = "Confirm",
+        danger: bool = False,
+    ) -> None:
+        super().__init__()
+        self._title = title
+        self.message = message
+        self.confirm_label = confirm_label
+        self.danger = danger
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="dialog"):
+            yield Static(self._title, classes="title")
+            yield Static(self.message, classes="message", markup=False)
+            with Horizontal(classes="confirm-actions"):
+                yield Button("Cancel", id="confirm-cancel")
+                yield Button(
+                    self.confirm_label,
+                    variant="error" if self.danger else "primary",
+                    id="confirm-ok",
+                )
+
+    @on(Button.Pressed, "#confirm-cancel")
+    def _cancel_pressed(self, _: Button.Pressed) -> None:
+        self.dismiss(False)
+
+    @on(Button.Pressed, "#confirm-ok")
+    def _confirm_pressed(self, _: Button.Pressed) -> None:
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+    def action_confirm(self) -> None:
+        self.dismiss(True)
+
+
 class PlaylistScreen(Screen):
     """Preview a flat playlist, then enqueue every entry."""
 
@@ -607,23 +659,36 @@ class PlaylistScreen(Screen):
         "vonly": "Video Only",
         "audio": "Audio Only",
     }
+    _QUALITY_STEPS = (2160, 1440, 1080, 720, 480, 360, 240)
 
     def __init__(self, playlist: PlaylistInfo, url: str = "") -> None:
         super().__init__()
         self.playlist = playlist
         self.url = url
         self._mode = "video"
+        self._quality_cap = 1080
         self._queued = False
 
+    @classmethod
+    def _quality_options(cls, cap: int) -> list[tuple[str, int]]:
+        steps = list(cls._QUALITY_STEPS)
+        if cap and cap not in steps:
+            steps.append(cap)
+        options: list[tuple[str, int]] = [("Best available", 0)]
+        options.extend((f"{value}p", value) for value in sorted(steps, reverse=True))
+        return options
+
     def compose(self) -> ComposeResult:
+        config = getattr(self.app, "config", AppConfig())
+        self._quality_cap = config.quality_cap
         yield Header(show_clock=True)
         with Container(classes="page playlist-page"):
             yield Static("PLAYLIST", classes="page-kicker")
             yield Static(escape(self.playlist.title), classes="page-title")
             yield Static("", id="playlist-summary", classes="page-subtitle")
-            yield DataTable(id="playlist-table", cursor_type="row")
-            with Horizontal(classes="page-actions"):
-                yield Button("← Back", id="playlist-back")
+            yield SelectableTable(id="playlist-table", cursor_type="row")
+            with Horizontal(classes="playlist-controls"):
+                yield Static("Mode", classes="control-label")
                 yield Button(
                     "▶ Video+Audio",
                     variant="success",
@@ -631,6 +696,24 @@ class PlaylistScreen(Screen):
                 )
                 yield Button("📹 Video", id="playlist-mode-vonly")
                 yield Button("🎵 Audio", id="playlist-mode-audio")
+                yield Static("Quality", classes="control-label")
+                yield Select(
+                    self._quality_options(self._quality_cap),
+                    value=self._quality_cap,
+                    allow_blank=False,
+                    id="playlist-quality",
+                )
+            with Horizontal(classes="selection-actions"):
+                yield Static("Selection", classes="control-label")
+                yield Button("Select all", id="playlist-select-all")
+                yield Button("Clear selection", id="playlist-select-none")
+            with Horizontal(classes="page-actions"):
+                yield Button("← Back", id="playlist-back")
+                yield Button(
+                    "＋ Queue selected",
+                    id="playlist-queue-selected",
+                    disabled=True,
+                )
                 yield Button(
                     f"＋ Queue all ({len(self.playlist.entries)})",
                     variant="primary",
@@ -643,18 +726,22 @@ class PlaylistScreen(Screen):
         if config.default_mode in self._MODE_LABELS:
             self._mode = config.default_mode
 
-        table = self.query_one("#playlist-table", DataTable)
+        table = self.query_one("#playlist-table", SelectableTable)
+        table.add_column("Sel", width=3)
         table.add_columns("#", "Title", "Duration", "Channel")
         for index, entry in enumerate(self.playlist.entries, start=1):
-            table.add_row(
+            table.add_selectable_row(
                 str(index),
                 escape(entry.title),
                 human_time(entry.duration),
                 escape(entry.uploader or "—"),
                 key=str(index),
             )
+        table.focus()
         self._update_mode_buttons()
+        self._update_quality_control()
         self._update_summary()
+        self._update_action_buttons()
 
     def _update_mode_buttons(self) -> None:
         for button_id, mode in (
@@ -666,20 +753,77 @@ class PlaylistScreen(Screen):
             button.variant = "success" if self._mode == mode else "default"
             button.refresh()
 
+    def _update_quality_control(self) -> None:
+        quality = self.query_one("#playlist-quality", Select)
+        quality.disabled = self._mode == "audio"
+
+    def _quality_label(self) -> str:
+        return "best available" if not self._quality_cap else f"≤{self._quality_cap}p"
+
+    def _selected_entries(self) -> list[PlaylistEntry]:
+        table = self.query_one("#playlist-table", SelectableTable)
+        entries: list[PlaylistEntry] = []
+        for key in table.selected_keys():
+            try:
+                index = int(key) - 1
+            except ValueError:
+                continue
+            if 0 <= index < len(self.playlist.entries):
+                entries.append(self.playlist.entries[index])
+        return entries
+
     def _update_summary(self) -> None:
         label = self._MODE_LABELS[self._mode]
-        self.query_one("#playlist-summary", Static).update(
-            f"{len(self.playlist.entries)} entries • Queue as {label}"
+        detail = "audio extraction" if self._mode == "audio" else f"quality {self._quality_label()}"
+        summary = f"{len(self.playlist.entries)} entries • {label} • {detail}"
+        selected = self.query_one("#playlist-table", SelectableTable).selected_count
+        if selected:
+            summary += f" • {selected} selected"
+        self.query_one("#playlist-summary", Static).update(summary)
+
+    def _update_action_buttons(self) -> None:
+        table = self.query_one("#playlist-table", SelectableTable)
+        selected = table.selected_count
+        queue_selected = self.query_one("#playlist-queue-selected", Button)
+        queue_selected.label = (
+            f"＋ Queue selected ({selected})" if selected else "＋ Queue selected"
         )
+        queue_selected.disabled = self._queued or selected == 0
+        self.query_one("#playlist-queue", Button).disabled = self._queued
+        select_all = self.query_one("#playlist-select-all", Button)
+        select_all.disabled = (
+            self._queued or not self.playlist.entries or selected == len(self.playlist.entries)
+        )
+        self.query_one("#playlist-select-none", Button).disabled = self._queued or selected == 0
 
     def _set_mode(self, mode: str) -> None:
         self._mode = mode
         self._update_mode_buttons()
+        self._update_quality_control()
         self._update_summary()
+
+    @on(Select.Changed, "#playlist-quality")
+    def _quality_changed(self, event: Select.Changed) -> None:
+        if isinstance(event.value, int):
+            self._quality_cap = event.value
+            self._update_summary()
+
+    @on(SelectableTable.SelectionChanged)
+    def _selection_changed(self, _: SelectableTable.SelectionChanged) -> None:
+        self._update_summary()
+        self._update_action_buttons()
 
     @on(Button.Pressed, "#playlist-back")
     def _back_pressed(self, _: Button.Pressed) -> None:
         self.action_back()
+
+    @on(Button.Pressed, "#playlist-select-all")
+    def _select_all_pressed(self, _: Button.Pressed) -> None:
+        self.query_one("#playlist-table", SelectableTable).select_all()
+
+    @on(Button.Pressed, "#playlist-select-none")
+    def _select_none_pressed(self, _: Button.Pressed) -> None:
+        self.query_one("#playlist-table", SelectableTable).clear_selection()
 
     @on(Button.Pressed)
     def _mode_pressed(self, event: Button.Pressed) -> None:
@@ -690,6 +834,10 @@ class PlaylistScreen(Screen):
         }.get(event.button.id or "")
         if mode is not None:
             self._set_mode(mode)
+
+    @on(Button.Pressed, "#playlist-queue-selected")
+    def _queue_selected_pressed(self, _: Button.Pressed) -> None:
+        self.action_queue_selected()
 
     @on(Button.Pressed, "#playlist-queue")
     def _queue_pressed(self, _: Button.Pressed) -> None:
@@ -704,14 +852,30 @@ class PlaylistScreen(Screen):
     def action_mode_audio(self) -> None:
         self._set_mode("audio")
 
+    def action_queue_selected(self) -> None:
+        if self._queued:
+            return
+        entries = self._selected_entries()
+        if not entries:
+            self.notify("Select at least one playlist entry first.", severity="warning")
+            return
+        self._queue_entries(entries)
+
     def action_queue_all(self) -> None:
+        self._queue_entries(self.playlist.entries)
+
+    def _queue_entries(self, entries: list[PlaylistEntry]) -> None:
         if self._queued:
             return
         config = getattr(self.app, "config", AppConfig())
-        policy = replace(DownloadPolicy.from_config(config), mode=self._mode)
+        policy = replace(
+            DownloadPolicy.from_config(config),
+            mode=self._mode,
+            quality_cap=self._quality_cap,
+        )
         state = getattr(self.app, "state", None)
         queue = state.queue if state is not None else DownloadQueue()
-        for entry in self.playlist.entries:
+        for entry in entries:
             queue.add(QueueItem.from_entry(entry, policy))
         store = getattr(self.app, "queue_store", None)
         if store is not None:
@@ -739,11 +903,16 @@ class QueueScreen(Screen):
             yield Static("DOWNLOAD QUEUE", classes="page-kicker")
             yield Static("Power-user queue", classes="page-title")
             yield Static("", id="queue-summary", classes="page-subtitle")
-            yield DataTable(id="queue-table", cursor_type="row")
+            yield SelectableTable(id="queue-table", cursor_type="row")
+            with Horizontal(classes="selection-actions"):
+                yield Static("Selection", classes="control-label")
+                yield Button("Select all", id="queue-select-all")
+                yield Button("Clear selection", id="queue-select-none")
             with Horizontal(classes="page-actions"):
                 yield Button("← Add URL", id="queue-add")
                 yield Button("Remove selected", id="queue-remove")
                 yield Button("Clear finished", id="queue-clear")
+                yield Button("Remove all", variant="error", id="queue-remove-all")
                 yield Button("Start queue", variant="warning", id="queue-start")
         yield Footer()
 
@@ -758,18 +927,19 @@ class QueueScreen(Screen):
         self._refresh()
 
     def _refresh(self) -> None:
-        table = self.query_one("#queue-table", DataTable)
+        table = self.query_one("#queue-table", SelectableTable)
         table.clear(columns=True)
         # Explicit widths keep the table readable at the 100-column minimum;
         # DataTable's content-width cache otherwise renders the first frame
         # with header-only widths.
+        table.add_column("Sel", width=3)
         table.add_column("#", width=3)
         table.add_column("Title", width=28)
         table.add_column("Mode", width=7)
         table.add_column("Status", width=14)
         table.add_column("URL", width=28)
         for index, item in enumerate(self.queue.items, start=1):
-            table.add_row(
+            table.add_selectable_row(
                 str(index),
                 escape(item.display_title),
                 escape(item.mode),
@@ -777,19 +947,69 @@ class QueueScreen(Screen):
                 escape(item.url),
                 key=str(index),
             )
+        table.focus()
+        self._update_summary()
+        self._update_action_buttons()
+
+    def _update_summary(self) -> None:
+        table = self.query_one("#queue-table", SelectableTable)
         resumable = self.queue.resumable()
         interrupted = sum(1 for item in self.queue.items if item.status == "interrupted")
         summary = f"{len(self.queue.items)} total • {len(resumable)} ready" + (
             f" • {interrupted} interrupted" if interrupted else ""
         )
+        if table.selected_count:
+            summary += f" • {table.selected_count} selected"
         self.query_one("#queue-summary", Static).update(summary)
+
+    def _items_for_keys(self, keys: list[str]) -> list[QueueItem]:
+        items: list[QueueItem] = []
+        for key in keys:
+            try:
+                index = int(key) - 1
+            except ValueError:
+                continue
+            if 0 <= index < len(self.queue.items):
+                items.append(self.queue.items[index])
+        return items
+
+    def _selected_queue_items(self) -> list[QueueItem]:
+        """Return explicitly selected rows, or the cursor row when none are selected."""
+        table = self.query_one("#queue-table", SelectableTable)
+        if table.selected_count:
+            return self._items_for_keys(table.selected_keys())
+        if 0 <= table.cursor_row < len(self.queue.items):
+            return [self.queue.items[table.cursor_row]]
+        return []
+
+    def _update_action_buttons(self) -> None:
+        table = self.query_one("#queue-table", SelectableTable)
+        selected_keys = table.selected_keys()
+        selected_items = (
+            self._items_for_keys(selected_keys) if selected_keys else self._selected_queue_items()
+        )
+        selected_resumable = [item for item in selected_items if item.resumable]
+        interrupted = sum(1 for item in self.queue.items if item.status == "interrupted")
         start = self.query_one("#queue-start", Button)
-        start.label = "Resume queue" if interrupted else "Start queue"
-        start.disabled = not resumable
-        self.query_one("#queue-remove", Button).disabled = not self.queue.items
+        if selected_keys:
+            start.label = f"Start selected ({len(selected_resumable)})"
+            start.disabled = not selected_resumable
+        else:
+            start.label = "Resume queue" if interrupted else "Start queue"
+            start.disabled = not self.queue.resumable()
+
+        remove = self.query_one("#queue-remove", Button)
+        remove.label = (
+            f"Remove selected ({len(selected_items)})" if selected_keys else "Remove selected"
+        )
+        remove.disabled = not selected_items
+        self.query_one("#queue-remove-all", Button).disabled = not self.queue.items
         self.query_one("#queue-clear", Button).disabled = not any(
             not item.resumable for item in self.queue.items
         )
+        select_all = self.query_one("#queue-select-all", Button)
+        select_all.disabled = not self.queue.items or table.selected_count == len(self.queue.items)
+        self.query_one("#queue-select-none", Button).disabled = table.selected_count == 0
 
     @staticmethod
     def _status_text(status: str) -> str:
@@ -817,18 +1037,59 @@ class QueueScreen(Screen):
         self._save()
         self._refresh()
 
+    @on(Button.Pressed, "#queue-select-all")
+    def _select_all_pressed(self, _: Button.Pressed) -> None:
+        self.query_one("#queue-table", SelectableTable).select_all()
+
+    @on(Button.Pressed, "#queue-select-none")
+    def _select_none_pressed(self, _: Button.Pressed) -> None:
+        self.query_one("#queue-table", SelectableTable).clear_selection()
+
+    @on(SelectableTable.SelectionChanged)
+    def _selection_changed(self, _: SelectableTable.SelectionChanged) -> None:
+        self._update_summary()
+        self._update_action_buttons()
+
     @on(Button.Pressed, "#queue-remove")
     def _remove_pressed(self, _: Button.Pressed) -> None:
-        table = self.query_one("#queue-table", DataTable)
-        if not 0 <= table.cursor_row < len(self.queue.items):
+        items = self._selected_queue_items()
+        if not items:
             return
-        item = self.queue.items[table.cursor_row]
-        if item.status == "running":
+        if any(item.status == "running" for item in items):
             self.notify("Stop the active download before removing it.", severity="warning")
             return
-        self.queue.items.remove(item)
+        for item in items:
+            self.queue.items.remove(item)
         self._save()
         self._refresh()
+
+    @on(Button.Pressed, "#queue-remove-all")
+    def _remove_all_pressed(self, _: Button.Pressed) -> None:
+        if not self.queue.items:
+            return
+        if any(item.status == "running" for item in self.queue.items):
+            self.notify("Stop the active download before removing all items.", severity="warning")
+            return
+        self.app.push_screen(
+            ConfirmModal(
+                "Remove all queue items?",
+                f"Remove {len(self.queue.items)} item(s) from the queue?\n\nThis cannot be undone.",
+                confirm_label="Remove all",
+                danger=True,
+            ),
+            callback=self._remove_all_result,
+        )
+
+    def _remove_all_result(self, confirmed: bool | None) -> None:
+        if not confirmed:
+            return
+        if any(item.status == "running" for item in self.queue.items):
+            self.notify("Stop the active download before removing all items.", severity="warning")
+            return
+        removed = self.queue.clear_all()
+        self._save()
+        self._refresh()
+        self.notify(f"Removed {removed} queue item(s).")
 
     @on(Button.Pressed, "#queue-start")
     def _start_pressed(self, _: Button.Pressed) -> None:
@@ -837,7 +1098,17 @@ class QueueScreen(Screen):
     def action_start(self) -> None:
         if self._started:
             return
-        items = self.queue.resumable()
+        table = self.query_one("#queue-table", SelectableTable)
+        if table.selected_count:
+            items = [item for item in self._items_for_keys(table.selected_keys()) if item.resumable]
+            if not items:
+                self.notify(
+                    "Select at least one queue item that can be started.",
+                    severity="warning",
+                )
+                return
+        else:
+            items = self.queue.resumable()
         if not items:
             return
         for item in items:

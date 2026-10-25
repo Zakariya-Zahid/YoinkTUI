@@ -13,7 +13,7 @@ UrlScreen
 │            ├── ClipModal
 │            └── PresetModal
 ├── playlist → PlaylistScreen → QueueScreen
-├── queue → QueueScreen → DownloadScreen (queue items)
+├── queue → QueueScreen → ConfirmModal (remove all) / DownloadScreen (queue items)
 └── library → LibraryScreen
 ```
 
@@ -31,6 +31,7 @@ interrupted, or failed items. `ErrorModal` is a legacy fallback.
 | `PlaylistScreen` | Pop back without queueing | |
 | `LibraryScreen` | Pop back | |
 | `PresetModal` | Dismiss without applying | |
+| `ConfirmModal` | Cancel the destructive action | |
 | `ClipModal` | Dismiss without changing the clip | |
 | `ErrorModal` | Dismiss | |
 | `StartupErrorScreen` | Quit | Dependency problem cannot be fixed in-app |

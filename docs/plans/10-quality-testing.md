@@ -13,21 +13,22 @@ keep the codebase healthy as modules grow. This module **blocks** Phase 1 work.
 
 ## 2. Current state
 
-- **216 tests** across backend and TUI (`uv run pytest -q`): parser contract,
+- **227 tests** across backend and TUI (`uv run pytest -q`): parser contract,
   models/coercions, selectors + merge fallback, config loader/precedence,
-  presets, queue persistence, SQLite history, command builder, process control,
-  probe/playlist probe, timecode/clips, markup escaping, packaging, formatters.
+  presets, queue persistence/bulk clearing, multi-select queue actions, playlist
+  quality caps, SQLite history, command builder, process control, probe/playlist
+  probe, timecode/clips, markup escaping, packaging, formatters.
 - `ruff` (lint + format), `mypy`, `pre-commit`, and pytest config live in
   `pyproject.toml` / `.pre-commit-config.yaml`; all gates are green locally.
 - CI runs on Linux + macOS for Python 3.12/3.13, with a separate wheel-install
   job; snapshot artifacts upload on failure.
 - TUI tests cover startup, missing dependencies, URL validation, duplicate
   submits, probe→format→download flows, queue/library/playlist/preset flows,
-  Esc semantics, and the action bar.
-- **52 SVG snapshots** cover `UrlScreen`, `FormatScreen`, `DownloadScreen`
+  multi-select queue and playlist actions, Esc semantics, and the action bar.
+- **56 SVG snapshots** cover `UrlScreen`, `FormatScreen`, `DownloadScreen`
   (running/paused/complete), multi-item download, queue, library, playlist,
-  preset modal, clip modal, startup error, and `ErrorModal` across two themes
-  and two sizes.
+  preset modal, confirm modal, clip modal, startup error, and `ErrorModal`
+  across two themes and two sizes.
 - `docs/contracts/progress.md` and `navigation.md` (plus `selection.md`) are
   backed by tests.
 - Coverage is not measured yet (P1).
@@ -70,8 +71,8 @@ keep the codebase healthy as modules grow. This module **blocks** Phase 1 work.
       start download (fake download) → dashboard states.
 - [x] Snapshot tests for `UrlScreen`, `FormatScreen`, `DownloadScreen`
       (running/paused/complete), multi-item download, queue, library, playlist,
-      preset modal, clip modal, startup error, and `ErrorModal`, across 2 themes
-      + 2 sizes (52 snapshots, clock/time frozen in tests).
+      preset modal, confirm modal, clip modal, startup error, and `ErrorModal`,
+      across 2 themes + 2 sizes (56 snapshots, clock/time frozen in tests).
 - [x] Regression test for the action-bar buttons and probe status.
 
 ### WS 10.4 — CI — **[P0]**

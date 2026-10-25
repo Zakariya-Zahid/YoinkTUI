@@ -25,8 +25,12 @@ live stats, pause/resume/cancel, completion, and multi-item queue management.
 - Multi-item mode adds a queue-aware item list above the per-stream rows, with
   per-item status and current-item progress; one failure continues the queue.
 - `QueueScreen` reviews, retries, removes, clears, and starts/resumes queued
-  items; `PlaylistScreen` queues every entry from a flat playlist probe and can
-  apply Video+Audio, Video Only, or Audio Only to the whole batch.
+  items; it supports multi-select with bulk actions for the selected rows and
+  “Remove all” clears the entire queue after confirmation.
+- `PlaylistScreen` queues every entry from a flat playlist probe and can apply
+  Video+Audio, Video Only, or Audio Only to the whole batch. It also supports
+  multi-select so only chosen entries are queued; a quality selector applies
+  Best available or a resolution cap (2160p–240p) to queued entries.
 - Queue state is persisted to `$XDG_DATA_HOME/yoinktui/queue.json`; running
   items become `interrupted` on restart and are offered for resume.
 - Completion writes history through `LibraryStore`; pause/resume/cancel are
@@ -57,14 +61,16 @@ live stats, pause/resume/cancel, completion, and multi-item queue management.
 - [x] Queue-aware dashboard: item list with statuses, current item highlighted.
 - [x] Playlist expansion (`--flat-playlist` probe) feeding the queue.
 - [x] Playlist queue modes (Video+Audio, Video Only, Audio Only).
+- [x] Playlist quality cap (Best available, 2160p–240p).
 - [x] Persist the queue so an interrupted app can resume (module 08).
 
 ### WS 05.3 — Controls & automation — **[P1]**
 - [ ] Optional concurrency (N active items) with a global vs. per-item limit.
 - [~] Global rate limit is config-driven; scheduled start / "download later" is not.
 - [ ] Notifications on completion (desktop notify, module 09 hook).
-- [~] Clear finished / remove selected / retry all failed via `QueueScreen`;
-      keyboard reordering is not implemented.
+- [~] Clear finished / remove selected / remove all / retry all failed via
+      `QueueScreen`; multi-select bulk actions are implemented, keyboard
+      reordering is not.
 
 ### WS 05.4 — Diagnostics in the dashboard — **[P2]**
 - [ ] Show the exact yt-dlp command (debug panel, opt-in).

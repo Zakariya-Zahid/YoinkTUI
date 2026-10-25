@@ -14,13 +14,22 @@ the first public release remains v1.0.0.
 - Persistent, sequential download queue (`backend/queue.py`) with item
   statuses, per-item policy snapshots, atomic JSON persistence, and automatic
   interrupted-state recovery after a restart.
-- `QueueScreen` for reviewing, retrying, removing, and starting queued items;
-  `DownloadScreen` now renders a multi-item dashboard with per-item status and
-  the current item's stream progress.
+- `QueueScreen` for reviewing, retrying, removing, starting, and multi-selecting
+  queued items; `DownloadScreen` now renders a multi-item dashboard with per-item
+  status and the current item's stream progress.
 - Playlist expansion via a fast `--flat-playlist` probe and `PlaylistScreen`
   for queueing every entry.
 - Playlist queue modes: Video+Audio, Video Only, and Audio Only. “Queue all”
   applies the selected mode to every playlist entry.
+- Multi-select for queue and playlist rows: `Space` / `Enter` toggles a row,
+  `Ctrl+A` selects all rows, and `Ctrl+Shift+A` clears the selection. Queue
+  actions (`Remove selected`, `Start selected`) and playlist actions
+  (`Queue selected`) run against the selection. The format picker remains
+  single-select because one format maps to one download.
+- Playlist quality selector with Best available and 2160p–240p caps; the chosen
+  cap is applied to every entry queued from the playlist.
+- `QueueScreen` “Remove all” action with a confirmation dialog for clearing
+  large queues in one step.
 - Udemy workflow guide covering cookie export, browser impersonation, legacy
   lecture URLs, whole-course playlist queueing, audio-only mode, and DRM
   limitations.

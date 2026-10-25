@@ -11,6 +11,7 @@ from yoinktui.backend.presets import Preset
 from yoinktui.backend.queue import QueueItem, QueueStore
 from yoinktui.backend.ytdlp import PlaylistEntry, PlaylistInfo, ProgressEvent
 from yoinktui.tui.screens import (
+    ConfirmModal,
     DownloadScreen,
     FormatScreen,
     LibraryScreen,
@@ -198,6 +199,7 @@ async def test_playlist_screen_queues_all_entries_as_audio(app: YoinkTUIApp) -> 
         await pilot.click("#playlist-mode-audio")
         await pilot.pause()
         assert playlist_screen._mode == "audio"
+        assert playlist_screen.query_one("#playlist-quality").disabled
         await pilot.click("#playlist-queue")
         queue_screen = await _wait_for(app, QueueScreen, pilot)
         assert queue_screen.query_one("#queue-table").row_count == 2
@@ -205,6 +207,127 @@ async def test_playlist_screen_queues_all_entries_as_audio(app: YoinkTUIApp) -> 
         assert [item.mode for item in items] == ["audio", "audio"]
         assert all(item.extract_audio for item in items)
         assert all(item.selector == "ba/b/bv*" for item in items)
+
+
+@pytest.mark.asyncio
+async def test_playlist_screen_queues_all_entries_with_selected_quality(
+    app: YoinkTUIApp,
+) -> None:
+    playlist = PlaylistInfo(
+        title="A playlist",
+        entries=[
+            PlaylistEntry(url="https://example.com/one", title="One", id="one"),
+            PlaylistEntry(url="https://example.com/two", title="Two", id="two"),
+        ],
+    )
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_screen(PlaylistScreen(playlist))
+        playlist_screen = await _wait_for(app, PlaylistScreen, pilot)
+        quality = playlist_screen.query_one("#playlist-quality")
+        quality.value = 720
+        await pilot.pause()
+        assert playlist_screen._quality_cap == 720
+        await pilot.click("#playlist-queue")
+        await _wait_for(app, QueueScreen, pilot)
+        assert all("height<=720" in item.selector for item in app.state.queue.items)
+
+
+@pytest.mark.asyncio
+async def test_playlist_screen_queues_selected_entries_only(app: YoinkTUIApp) -> None:
+    playlist = PlaylistInfo(
+        title="A playlist",
+        entries=[
+            PlaylistEntry(url="https://example.com/one", title="One", id="one"),
+            PlaylistEntry(url="https://example.com/two", title="Two", id="two"),
+        ],
+    )
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_screen(PlaylistScreen(playlist))
+        playlist_screen = await _wait_for(app, PlaylistScreen, pilot)
+        table = playlist_screen.query_one("#playlist-table")
+        table.toggle_key("2")
+        await pilot.pause()
+        assert table.selected_count == 1
+        await pilot.click("#playlist-queue-selected")
+        queue_screen = await _wait_for(app, QueueScreen, pilot)
+        assert queue_screen.query_one("#queue-table").row_count == 1
+        assert [item.title for item in app.state.queue.items] == ["Two"]
+
+
+@pytest.mark.asyncio
+async def test_queue_screen_multi_select_removes_selected_items(app: YoinkTUIApp) -> None:
+    app.state.queue.items = [
+        _item("First"),
+        _item("Second", "https://example.com/second"),
+        _item("Third", "https://example.com/third"),
+    ]
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_screen(QueueScreen(queue=app.state.queue))
+        queue_screen = await _wait_for(app, QueueScreen, pilot)
+        table = queue_screen.query_one("#queue-table")
+        await pilot.press("space")
+        await pilot.press("down")
+        await pilot.press("space")
+        await pilot.pause()
+        assert table.selected_count == 2
+
+        await pilot.click("#queue-remove")
+        await pilot.pause()
+        assert queue_screen.query_one("#queue-table").row_count == 1
+        assert [item.title for item in app.state.queue.items] == ["Third"]
+        assert queue_screen.query_one("#queue-table").selected_count == 0
+
+
+@pytest.mark.asyncio
+async def test_queue_screen_starts_selected_items_only(
+    app: YoinkTUIApp,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = [
+        ProgressEvent(kind="download", status="downloading", downloaded=512, total=1024),
+        ProgressEvent(kind="download", status="finished", downloaded=1024, total=1024),
+        ProgressEvent(kind="done", filename="/tmp/demo.mp4"),
+    ]
+    monkeypatch.setattr("yoinktui.tui.screens.download", lambda *args, **kwargs: iter(events))
+    first = _item("First")
+    second = _item("Second", "https://example.com/second")
+    app.state.queue.items = [first, second]
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_screen(QueueScreen(queue=app.state.queue))
+        await _wait_for(app, QueueScreen, pilot)
+        await pilot.press("down")
+        await pilot.press("space")
+        await pilot.pause()
+        await pilot.click("#queue-start")
+        download_screen = await _wait_for(app, DownloadScreen, pilot)
+        assert download_screen.items[0].title == "Second"
+
+
+@pytest.mark.asyncio
+async def test_queue_screen_removes_all_items_after_confirmation(
+    app: YoinkTUIApp,
+) -> None:
+    app.state.queue.items = [
+        _item("First"),
+        _item("Second", "https://example.com/second"),
+        _item("Third", "https://example.com/third"),
+    ]
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_screen(QueueScreen(queue=app.state.queue))
+        queue_screen = await _wait_for(app, QueueScreen, pilot)
+        assert queue_screen.query_one("#queue-table").row_count == 3
+
+        await pilot.click("#queue-remove-all")
+        modal = await _wait_for(app, ConfirmModal, pilot)
+        assert "Remove all queue items?" in str(modal._title)
+        await pilot.click("#confirm-ok")
+        await pilot.pause()
+        assert queue_screen.query_one("#queue-table").row_count == 0
+        assert app.state.queue.items == []
+        assert app.queue_store.load().items == []
 
 
 @pytest.mark.asyncio

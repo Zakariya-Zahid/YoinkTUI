@@ -143,7 +143,12 @@ For a whole course playlist:
 1. Paste the course URL.
 2. Click **Playlist**.
 3. Choose **Video+Audio**, **Video Only**, or **Audio Only**.
-4. Click **Queue all**.
+4. Pick a **Quality** cap, or choose **Best available**.
+5. Click **Queue all**.
+
+The quality cap applies to every entry in the batch. Udemy's flat playlist does
+not expose each lecture's full format table, so YoinkTUI applies the cap to the
+streams yt-dlp finds when each lecture is extracted.
 
 Audio Only extracts audio from each lecture using the configured
 `audio_format`/`audio_quality` (MP3 by default). The queue is sequential; use

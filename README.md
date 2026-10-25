@@ -17,10 +17,12 @@ TUI download manager for YouTube (and 1000+ sites) via **yt-dlp** + **ffmpeg**.
 - **Clip downloads** — pick a start/end range to grab just the useful part of a long podcast or tutorial
 - **Steam-style download manager** — per-stream queue, live speed/ETA/peak/disk tiles,
   overall progress, pause/resume, cancel, and a timestamped activity log
-- **Persistent queue** — add several items, review/retry/remove them, and resume
-  interrupted or failed downloads after a restart
+- **Persistent queue** — add several items, review/retry/remove them, clear the
+  whole queue at once, resume interrupted or failed downloads after a restart,
+  and multi-select rows for bulk remove/start actions
 - **Playlist support** — preview a playlist, choose Video+Audio, Video Only, or
-  Audio Only, and queue every entry sequentially
+  Audio Only, pick a quality cap, and queue every entry sequentially; queue a
+  selected subset with multi-select
 - **History & library** — SQLite-backed history with search, details, open
   file/folder, copy URL, re-download, and delete
 - **Presets** — built-in Music, Archive, and Mobile profiles plus your own
@@ -30,7 +32,8 @@ TUI download manager for YouTube (and 1000+ sites) via **yt-dlp** + **ffmpeg**.
 - **Trustworthy failures** — typed errors with hints, startup dependency checks,
   and a `yoinktui --doctor` pre-flight report
 - **Live thumbnail** — renders via kitty graphics / sixel / Unicode fallback (`textual-image`)
-- **Format picker** — resolution, codec, size, and bitrate at a glance
+- **Format picker** — resolution, codec, size, and bitrate at a glance; one
+  format maps to one download, so the format table itself stays single-select
 - **Video + Audio / Video Only / Audio Only** modes
 - **Real pause & resume** — suspends the whole yt-dlp process group (POSIX)
 
@@ -91,8 +94,24 @@ startup screen instead of a traceback.
 3. **Choose mode** — `Video+Audio` (default), `Video Only`, `Audio Only`
 4. **Optional preset** — open the preset modal to apply Music, Archive, Mobile, or a user-defined bundle
 5. **Optional clip** — press `C`, enter a start/end range, then Apply. Leave end blank to go to the end of the video.
-6. **Download or queue** — start immediately, or add the item to the persistent queue. Playlist URLs can queue every entry as video+audio, video only, or audio only.
+6. **Download or queue** — start immediately, or add the item to the persistent queue. Playlist URLs can queue every entry as video+audio, video only, or audio only, with a quality cap such as 1080p or Best available. Playlist entries can also be queued as a multi-select subset.
 7. **Resume / browse** — pending, interrupted, and failed queue items are offered on startup; the Library screen searches and acts on history.
+
+### Multi-select actions
+
+Queue and playlist tables support row selection:
+
+- `Space` / `Enter` toggles the highlighted row.
+- `Ctrl+A` selects all rows.
+- `Ctrl+Shift+A` clears the selection.
+
+Actions then operate on the selection:
+
+- Queue screen: remove selected rows, start selected rows, or clear the selection.
+- Playlist screen: queue selected entries, or clear the selection.
+
+The format picker remains intentionally single-select because one chosen format
+maps to one download; bulk format selection is not a queue action.
 
 ## Configuration
 
@@ -232,6 +251,10 @@ may work later without changes.
 | `P` / `Space` | Pause / resume download |
 | `Ctrl+Q` | Quit app |
 | `Ctrl+D` | Toggle dark/light theme |
+
+In the queue and playlist tables, `Space` / `Enter` toggle row selection, `Ctrl+A`
+selects all rows, and `Ctrl+Shift+A` clears the selection. The download screen keeps
+its own `Space` pause/resume behavior.
 
 ## Architecture
 

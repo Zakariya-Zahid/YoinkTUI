@@ -140,6 +140,22 @@ def test_queue_item_from_playlist_entry(tmp_path: Path) -> None:
     assert item.title == "Episode One"
 
 
+def test_queue_item_from_playlist_entry_applies_quality_cap(tmp_path: Path) -> None:
+    from yoinktui.backend.ytdlp import PlaylistEntry
+
+    policy = DownloadPolicy(mode="video", download_dir=tmp_path, quality_cap=720)
+    item = QueueItem.from_entry(
+        PlaylistEntry(
+            url="https://example.com/watch?v=one",
+            title="Episode One",
+            id="one",
+        ),
+        policy,
+    )
+    assert "height<=720" in item.selector
+    assert "bv*" in item.selector
+
+
 def test_queue_roundtrip_and_resume_status(tmp_path: Path) -> None:
     store = QueueStore(tmp_path / "queue.json")
     queue = DownloadQueue()
@@ -193,6 +209,19 @@ def test_clear_finished_keeps_resumable() -> None:
     )
     assert queue.clear_finished() == 1
     assert [item.status for item in queue.items] == ["failed", "interrupted"]
+
+
+def test_clear_all_removes_every_status() -> None:
+    queue = DownloadQueue(
+        items=[
+            QueueItem(url="https://example.com/a", status="done"),
+            QueueItem(url="https://example.com/b", status="failed"),
+            QueueItem(url="https://example.com/c", status="pending"),
+            QueueItem(url="https://example.com/d", status="interrupted"),
+        ]
+    )
+    assert queue.clear_all() == 4
+    assert queue.items == []
 
 
 def test_safe_filename_strips_unsafe_characters() -> None:

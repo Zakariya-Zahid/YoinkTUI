@@ -5,11 +5,14 @@ from __future__ import annotations
 import contextlib
 import io
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
+from rich.text import Text
 from textual import on, work
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
+from textual.coordinate import Coordinate
 from textual.css.query import NoMatches
 from textual.message import Message
 from textual.reactive import reactive
@@ -223,6 +226,123 @@ class FormatTable(DataTable):
                     self._formats[event.cursor_row], event.row_key, event.cursor_row
                 )
             )
+
+
+class SelectableTable(DataTable):
+    """DataTable with persistent row selection.
+
+    The first column is reserved for the selection marker. Screens add rows
+    with :meth:`add_selectable_row`; Space/Enter toggles the highlighted row,
+    Ctrl+A selects every row, and Ctrl+Shift+A clears the selection.
+    """
+
+    BINDINGS = [
+        Binding("space", "toggle_selection", "Toggle selection", show=False),
+        Binding("ctrl+a", "select_all", "Select all", show=False),
+        Binding("ctrl+shift+a", "clear_selection", "Clear selection", show=False),
+    ]
+
+    class SelectionChanged(Message):
+        """Posted whenever the set of selected rows changes."""
+
+        def __init__(self, table: SelectableTable, selected: int, total: int) -> None:
+            super().__init__()
+            self.table = table
+            self.selected = selected
+            self.total = total
+
+    def __init__(self, *args, **kwargs) -> None:
+        self._selectable_keys: list[str] = []
+        self._selected_keys: set[str] = set()
+        super().__init__(*args, **kwargs)
+
+    def clear(self, columns: bool = False) -> Self:
+        self._selectable_keys.clear()
+        self._selected_keys.clear()
+        return super().clear(columns)
+
+    def add_selectable_row(self, *cells, key: str, **kwargs) -> None:
+        """Add a row with a leading selection marker and a stable key."""
+        self._selectable_keys.append(key)
+        self.add_row(self._marker(False), *cells, key=key, **kwargs)
+
+    @staticmethod
+    def _marker(selected: bool) -> Text:
+        # A Text object avoids DataTable's markup parser treating [ ] as a tag.
+        return Text("[✓]", style="bold green") if selected else Text("[ ]", style="dim")
+
+    @property
+    def selected_count(self) -> int:
+        return len(self._selected_keys)
+
+    def selected_keys(self) -> list[str]:
+        """Return selected row keys in display order."""
+        return [key for key in self._selectable_keys if key in self._selected_keys]
+
+    def is_selected(self, key: str) -> bool:
+        return key in self._selected_keys
+
+    def toggle_cursor(self) -> None:
+        if 0 <= self.cursor_row < len(self._selectable_keys):
+            self.toggle_key(self._selectable_keys[self.cursor_row])
+
+    def toggle_key(self, key: str) -> None:
+        if key not in self._selectable_keys:
+            return
+        if key in self._selected_keys:
+            self._selected_keys.remove(key)
+        else:
+            self._selected_keys.add(key)
+        self._update_marker(key)
+        self._post_selection_changed()
+
+    def select_all(self) -> None:
+        if not self._selectable_keys:
+            return
+        self._selected_keys = set(self._selectable_keys)
+        self._update_all_markers()
+        self._post_selection_changed()
+
+    def clear_selection(self) -> None:
+        if not self._selected_keys:
+            return
+        self._selected_keys.clear()
+        self._update_all_markers()
+        self._post_selection_changed()
+
+    def _update_all_markers(self) -> None:
+        for key in self._selectable_keys:
+            self._update_marker(key)
+
+    def _update_marker(self, key: str) -> None:
+        try:
+            row = self.get_row_index(key)
+        except Exception:
+            return
+        self.update_cell_at(
+            Coordinate(row, 0),
+            self._marker(key in self._selected_keys),
+            update_width=True,
+        )
+
+    def _post_selection_changed(self) -> None:
+        self.post_message(
+            self.SelectionChanged(self, len(self._selected_keys), len(self._selectable_keys))
+        )
+
+    def action_toggle_selection(self) -> None:
+        self.toggle_cursor()
+
+    def action_select_all(self) -> None:
+        self.select_all()
+
+    def action_clear_selection(self) -> None:
+        self.clear_selection()
+
+    @on(DataTable.RowSelected)
+    def _on_row_selected(self, event: DataTable.RowSelected) -> None:
+        self.toggle_cursor()
+        event.stop()
 
 
 # ---------------------------------------------------------------------------

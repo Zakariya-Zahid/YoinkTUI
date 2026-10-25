@@ -370,6 +370,12 @@ class DownloadQueue:
         self.items = [item for item in self.items if item.resumable]
         return before - len(self.items)
 
+    def clear_all(self) -> int:
+        """Remove every item, returning how many were removed."""
+        removed = len(self.items)
+        self.items.clear()
+        return removed
+
     def to_dict(self) -> dict[str, Any]:
         return {"version": 1, "items": [item.to_dict() for item in self.items]}
 

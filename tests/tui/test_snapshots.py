@@ -27,6 +27,7 @@ from yoinktui.backend.ytdlp import (
 from yoinktui.tui import screens
 from yoinktui.tui.screens import (
     ClipModal,
+    ConfirmModal,
     DownloadScreen,
     ErrorModal,
     FormatScreen,
@@ -129,6 +130,25 @@ class ErrorSnapshotApp(App):
             ErrorModal(
                 "Network error: connection timed out.\n\n"
                 "Hint: check your internet connection and retry."
+            )
+        )
+
+
+class ConfirmSnapshotApp(App):
+    CSS_PATH = str(_CSS)
+
+    def __init__(self, theme: str) -> None:
+        super().__init__()
+        self.theme = theme
+        self.config = AppConfig(show_preview=False)
+
+    def on_mount(self) -> None:
+        self.push_screen(
+            ConfirmModal(
+                "Remove all queue items?",
+                "Remove 3 item(s) from the queue?\n\nThis cannot be undone.",
+                confirm_label="Remove all",
+                danger=True,
             )
         )
 
@@ -458,6 +478,14 @@ def test_download_screen_snapshot(
 @pytest.mark.parametrize("size", SIZES)
 def test_error_modal_snapshot(snap_compare, frozen_time, theme: str, size: tuple[int, int]) -> None:
     assert snap_compare(ErrorSnapshotApp(theme=theme), terminal_size=size)
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES)
+def test_confirm_modal_snapshot(
+    snap_compare, frozen_time, theme: str, size: tuple[int, int]
+) -> None:
+    assert snap_compare(ConfirmSnapshotApp(theme=theme), terminal_size=size)
 
 
 @pytest.mark.parametrize("theme", THEMES)
