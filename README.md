@@ -151,7 +151,8 @@ keep_original = false
 
 [network]
 proxy = ""
-cookies_from_browser = ""
+cookies_from_browser = ""  # browser name, e.g. "firefox" or "chrome:PROFILE"
+cookies_file = ""          # exported Netscape cookies.txt, e.g. "~/cookies.txt"
 
 [ui]
 show_preview = true
@@ -213,14 +214,25 @@ launch.
 Some sites need a logged-in browser session or a different network:
 
 ```bash
+# Read cookies directly from a logged-in browser profile
 yoinktui --cookies-from-browser firefox
 yoinktui --cookies-from-browser "firefox:/path/to/profile" \
   --proxy socks5://127.0.0.1:1080
+
+# Or use a Netscape cookies.txt exported by a browser extension
+yoinktui --cookies ~/cookies.txt
 ```
 
-The same values can live in `[network]`. Use the same browser names as
-yt-dlp: `chrome`, `firefox`, `edge`, `brave`, or `browser:profile`. Extra
-yt-dlp flags can be passed with `--yt-dlp-arg=...` (repeatable).
+The same values can live in `[network]`. `cookies_from_browser` accepts
+yt-dlp browser names: `chrome`, `firefox`, `edge`, `brave`, or
+`browser:profile`. A `cookies.txt` file must go in `cookies_file` (or
+`--cookies`), **not** in `cookies_from_browser`; pointing the browser option at
+a file makes yt-dlp reject every URL. Extra yt-dlp flags can be passed with
+`--yt-dlp-arg=...` (repeatable).
+
+yt-dlp is updated frequently to keep up with site changes. If downloads start
+failing across many sites, update it first (`yt-dlp -U`, or
+`uv tool install --upgrade yt-dlp`).
 
 ### Udemy courses and lectures
 

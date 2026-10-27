@@ -30,6 +30,10 @@ the first public release remains v1.0.0.
   cap is applied to every entry queued from the playlist.
 - `QueueScreen` “Remove all” action with a confirmation dialog for clearing
   large queues in one step.
+- `--cookies FILE` and `[network].cookies_file` for Netscape `cookies.txt`
+  exports, kept separate from `--cookies-from-browser`.
+- `YOINKTUI_COOKIES_FILE` environment override.
+- Stale-yt-dlp startup warning based on release age, not just a hard minimum.
 - Udemy workflow guide covering cookie export, browser impersonation, legacy
   lecture URLs, whole-course playlist queueing, audio-only mode, and DRM
   limitations.
@@ -63,6 +67,9 @@ the first public release remains v1.0.0.
 
 ### Fixed
 
+- A cookies file path in `cookies_from_browser` (or an unknown browser name)
+  is now detected and ignored, with a warning, instead of being passed to
+  yt-dlp and breaking every probe/download with "unsupported browser".
 - Interrupted app exits leave queued items resumable and record the active
   download as `interrupted` in history instead of losing it.
 - Queue failures are reported per item without aborting the remaining items.

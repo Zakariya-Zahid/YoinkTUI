@@ -125,8 +125,7 @@ Launch YoinkTUI with the same cookie and impersonation arguments:
 
 ```bash
 yoinktui \
-  --yt-dlp-arg=--cookies \
-  --yt-dlp-arg=~/cookies.txt \
+  --cookies ~/cookies.txt \
   --yt-dlp-arg=--impersonate \
   --yt-dlp-arg=chrome
 ```

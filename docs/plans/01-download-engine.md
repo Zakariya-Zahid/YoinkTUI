@@ -86,7 +86,7 @@ without any TUI.
       queue screen's resume affordance.
 - [x] Subtitles (`--write-subs`), metadata embed, thumbnail embed.
 - [ ] Chapters and SponsorBlock.
-- [x] Cookies-from-browser, proxy, and playlist opt-in (`--yes-playlist`).
+- [x] Cookies file / cookies-from-browser, proxy, and playlist opt-in (`--yes-playlist`).
 - [ ] Post-download verification (checksum/ffprobe) as an optional step.
 
 ## 5. Milestones

@@ -29,6 +29,7 @@ import time
 from collections import deque
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
@@ -343,6 +344,9 @@ def tool_available(tool: str) -> bool:
 
 
 MIN_YTDLP_VERSION = (2024, 1, 1)
+# yt-dlp tracks site changes continuously; a release older than this often
+# fails on YouTube and other actively-changing sites.
+STALE_YTDLP_DAYS = 90
 
 
 @dataclass(frozen=True, slots=True)
@@ -428,6 +432,20 @@ def _ytdlp_too_old(version_text: str | None) -> bool:
     return tuple(int(part) for part in match.groups()) < MIN_YTDLP_VERSION
 
 
+def _ytdlp_age_days(version_text: str | None) -> int | None:
+    """Age of a calendar-versioned yt-dlp release in days, if known."""
+    if not version_text:
+        return None
+    match = re.search(r"(\d{4})\.(\d{2})\.(\d{2})", version_text)
+    if not match:
+        return None
+    try:
+        released = date(*(int(part) for part in match.groups()))
+    except ValueError:
+        return None
+    return (date.today() - released).days
+
+
 def check_dependencies() -> DependencyReport:
     """Check that yt-dlp and ffmpeg are available before any screen opens."""
     statuses: list[DependencyStatus] = []
@@ -435,8 +453,18 @@ def check_dependencies() -> DependencyReport:
         path = shutil.which(tool)
         version = tool_version(tool) if path else None
         detail = ""
-        if tool == "yt-dlp" and _ytdlp_too_old(version):
-            detail = f"yt-dlp {version} is old; run 'yt-dlp -U' for best site support."
+        if tool == "yt-dlp":
+            age = _ytdlp_age_days(version)
+            if _ytdlp_too_old(version):
+                detail = (
+                    f"yt-dlp {version} is too old; update it for working site support "
+                    "(yt-dlp -U, or 'uv tool install --upgrade yt-dlp')."
+                )
+            elif age is not None and age > STALE_YTDLP_DAYS:
+                detail = (
+                    f"yt-dlp {version} is {age} days old; update it for best site support "
+                    "(yt-dlp -U, or 'uv tool install --upgrade yt-dlp')."
+                )
         statuses.append(
             DependencyStatus(
                 tool=tool, path=path, version=version, ok=path is not None, detail=detail
