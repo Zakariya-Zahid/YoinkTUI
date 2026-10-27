@@ -29,6 +29,20 @@ CONTAINERS = ("mkv", "mp4", "auto")
 AUDIO_FORMATS = ("mp3", "m4a", "opus", "flac", "best")
 MODES = ("video", "vonly", "audio")
 
+# Browser names accepted by yt-dlp's --cookies-from-browser. Keep this in sync
+# with upstream when yt-dlp adds a browser.
+SUPPORTED_BROWSERS = (
+    "brave",
+    "chrome",
+    "chromium",
+    "edge",
+    "firefox",
+    "opera",
+    "safari",
+    "vivaldi",
+    "whale",
+)
+
 _RATE_LIMIT = re.compile(r"^\d+(?:\.\d+)?[KMGkmg]?$")
 
 
@@ -97,6 +111,7 @@ class AppConfig:
     # [network]
     proxy: str | None = None
     cookies_from_browser: str | None = None
+    cookies_file: Path | None = None
     extra_args: tuple[str, ...] = ()
 
     # [ui]
@@ -113,6 +128,8 @@ class AppConfig:
     def ytdlp_args(self) -> list[str]:
         """Extra yt-dlp flags shared by probe and download."""
         args: list[str] = []
+        if self.cookies_file:
+            args += ["--cookies", str(self.cookies_file)]
         if self.cookies_from_browser:
             args += ["--cookies-from-browser", self.cookies_from_browser]
         if self.proxy:
@@ -151,6 +168,7 @@ _FILE_SETTERS: tuple[_Setter, ...] = (
     _Setter("download", "keep_original", "keep_original", bool),
     _Setter("network", "proxy", "proxy", str),
     _Setter("network", "cookies_from_browser", "cookies_from_browser", str),
+    _Setter("network", "cookies_file", "cookies_file", Path),
     _Setter("ui", "ascii", "ascii", bool),
     _Setter("ui", "no_color", "no_color", bool),
     _Setter("ui", "show_preview", "show_preview", bool),
@@ -173,6 +191,7 @@ _ENV_SETTERS: dict[str, tuple[str, type]] = {
     "YOINKTUI_KEEP_ORIGINAL": ("keep_original", bool),
     "YOINKTUI_PROXY": ("proxy", str),
     "YOINKTUI_COOKIES_FROM_BROWSER": ("cookies_from_browser", str),
+    "YOINKTUI_COOKIES_FILE": ("cookies_file", Path),
     "YOINKTUI_ASCII": ("ascii", bool),
     "YOINKTUI_NO_COLOR": ("no_color", bool),
     "YOINKTUI_SHOW_PREVIEW": ("show_preview", bool),
@@ -366,13 +385,30 @@ def _apply_cli(config: AppConfig, overrides: Mapping[str, Any], warnings: list[s
             continue
         setattr(config, attr, value)
         # Coerce strings that argparse kept as text for convenience.
-        if attr == "download_dir" and isinstance(value, str):
-            config.download_dir = Path(value).expanduser()
+        if attr in ("download_dir", "cookies_file") and isinstance(value, str):
+            setattr(config, attr, Path(value).expanduser())
         elif attr in ("quality_cap", "concurrent_fragments") and isinstance(value, str):
             try:
                 setattr(config, attr, int(value))
             except ValueError:
                 warnings.append(f"--{attr.replace('_', '-')}: expected a number; keeping default")
+
+
+def _browser_name(value: str) -> str:
+    """Return the browser part of a yt-dlp ``--cookies-from-browser`` spec."""
+    return re.split(r"[:+]", value.strip(), maxsplit=1)[0].strip().lower()
+
+
+def _looks_like_path(value: str) -> bool:
+    """Heuristic for a cookies file path stored where a browser name belongs."""
+    text = value.strip()
+    if not text:
+        return False
+    if text.startswith(("~", "./", "../", "/")):
+        return True
+    if text.lower().endswith((".txt", ".cookies", ".cookie")):
+        return True
+    return bool(re.match(r"^[A-Za-z]:[\\/]", text))
 
 
 def _validate(config: AppConfig, warnings: list[str], *, strict: bool) -> None:
@@ -423,6 +459,35 @@ def _validate(config: AppConfig, warnings: list[str], *, strict: bool) -> None:
             "rate_limit",
             "",
         )
+
+    if config.cookies_from_browser:
+        raw = config.cookies_from_browser.strip()
+        if _browser_name(raw) in SUPPORTED_BROWSERS:
+            config.cookies_from_browser = raw
+        else:
+            if config.cookies_file is None and _looks_like_path(raw):
+                config.cookies_file = Path(raw).expanduser()
+                warnings.append(
+                    "cookies_from_browser expects a browser name (firefox, chrome, ...); "
+                    f"treating {raw!r} as a cookies file instead. "
+                    "Use [network].cookies_file (or --cookies) for exported files."
+                )
+            else:
+                warnings.append(
+                    f"cookies_from_browser {raw!r} is not a supported browser "
+                    f"({', '.join(SUPPORTED_BROWSERS)}); ignoring it."
+                )
+            config.cookies_from_browser = None
+
+    if config.cookies_file is not None:
+        config.cookies_file = Path(config.cookies_file).expanduser()
+        if not config.cookies_file.is_file():
+            warnings.append(f"cookies_file {config.cookies_file} does not exist; ignoring it")
+            config.cookies_file = None
+
+    if config.cookies_file is not None and config.cookies_from_browser:
+        warnings.append("Both cookies_file and cookies_from_browser are set; using cookies_file.")
+        config.cookies_from_browser = None
 
     config.download_dir = Path(config.download_dir).expanduser()
 
@@ -508,6 +573,7 @@ def config_to_dict(config: AppConfig) -> dict[str, Any]:
         "network": {
             "proxy": config.proxy or "",
             "cookies_from_browser": config.cookies_from_browser or "",
+            "cookies_file": str(config.cookies_file) if config.cookies_file else "",
         },
         "ui": {
             "ascii": config.ascii,

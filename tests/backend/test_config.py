@@ -88,6 +88,50 @@ show_preview = false
     assert config.ytdlp_args[:2] == ["--cookies-from-browser", "firefox"]
 
 
+def test_cookies_file_is_passed_to_ytdlp(tmp_path: Path) -> None:
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    path = tmp_path / "config.toml"
+    path.write_text(f'[network]\ncookies_file = "{cookies}"\n', encoding="utf-8")
+
+    config = load_config(path, env={})
+    assert config.cookies_file == cookies
+    assert config.ytdlp_args[:2] == ["--cookies", str(cookies)]
+
+
+def test_cookies_path_in_browser_field_is_migrated(tmp_path: Path) -> None:
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    path = tmp_path / "config.toml"
+    path.write_text(f'[network]\ncookies_from_browser = "{cookies}"\n', encoding="utf-8")
+
+    config = load_config(path, env={})
+    assert config.cookies_from_browser is None
+    assert config.cookies_file == cookies
+    assert config.ytdlp_args[:2] == ["--cookies", str(cookies)]
+    assert any("expects a browser name" in warning for warning in config.warnings)
+
+
+def test_unsupported_browser_is_ignored(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('[network]\ncookies_from_browser = "firfox"\n', encoding="utf-8")
+
+    config = load_config(path, env={})
+    assert config.cookies_from_browser is None
+    assert config.ytdlp_args == []
+    assert any("not a supported browser" in warning for warning in config.warnings)
+
+
+def test_missing_cookies_file_is_ignored(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('[network]\ncookies_file = "/nonexistent/cookies.txt"\n', encoding="utf-8")
+
+    config = load_config(path, env={})
+    assert config.cookies_file is None
+    assert config.ytdlp_args == []
+    assert any("does not exist" in warning for warning in config.warnings)
+
+
 def test_precedence_file_then_env_then_cli(tmp_path: Path) -> None:
     path = tmp_path / "config.toml"
     path.write_text('[download]\nquality_cap = 720\ncontainer = "mkv"\n', encoding="utf-8")

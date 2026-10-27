@@ -28,6 +28,18 @@ def test_print_config(
     assert "quality_cap = 1080" in output
 
 
+def test_print_config_with_cookies_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+
+    assert main(["--print-config", "--cookies", str(cookies)]) == 0
+    output = capsys.readouterr().out
+    assert f'cookies_file = "{cookies}"' in output
+
+
 def test_write_default_config(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     target = tmp_path / "config.toml"
     assert main(["--config", str(target), "--write-default-config"]) == 0
