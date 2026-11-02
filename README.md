@@ -153,6 +153,7 @@ keep_original = false
 proxy = ""
 cookies_from_browser = ""  # browser name, e.g. "firefox" or "chrome:PROFILE"
 cookies_file = ""          # exported Netscape cookies.txt, e.g. "~/cookies.txt"
+impersonate = ""           # client to impersonate, e.g. "chrome"
 
 [ui]
 show_preview = true

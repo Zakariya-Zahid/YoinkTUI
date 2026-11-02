@@ -112,6 +112,7 @@ class AppConfig:
     proxy: str | None = None
     cookies_from_browser: str | None = None
     cookies_file: Path | None = None
+    impersonate: str | None = None
     extra_args: tuple[str, ...] = ()
 
     # [ui]
@@ -132,6 +133,8 @@ class AppConfig:
             args += ["--cookies", str(self.cookies_file)]
         if self.cookies_from_browser:
             args += ["--cookies-from-browser", self.cookies_from_browser]
+        if self.impersonate:
+            args += ["--impersonate", self.impersonate]
         if self.proxy:
             args += ["--proxy", self.proxy]
         args += list(self.extra_args)
@@ -169,6 +172,7 @@ _FILE_SETTERS: tuple[_Setter, ...] = (
     _Setter("network", "proxy", "proxy", str),
     _Setter("network", "cookies_from_browser", "cookies_from_browser", str),
     _Setter("network", "cookies_file", "cookies_file", Path),
+    _Setter("network", "impersonate", "impersonate", str),
     _Setter("ui", "ascii", "ascii", bool),
     _Setter("ui", "no_color", "no_color", bool),
     _Setter("ui", "show_preview", "show_preview", bool),
@@ -192,6 +196,7 @@ _ENV_SETTERS: dict[str, tuple[str, type]] = {
     "YOINKTUI_PROXY": ("proxy", str),
     "YOINKTUI_COOKIES_FROM_BROWSER": ("cookies_from_browser", str),
     "YOINKTUI_COOKIES_FILE": ("cookies_file", Path),
+    "YOINKTUI_IMPERSONATE": ("impersonate", str),
     "YOINKTUI_ASCII": ("ascii", bool),
     "YOINKTUI_NO_COLOR": ("no_color", bool),
     "YOINKTUI_SHOW_PREVIEW": ("show_preview", bool),
@@ -489,6 +494,9 @@ def _validate(config: AppConfig, warnings: list[str], *, strict: bool) -> None:
         warnings.append("Both cookies_file and cookies_from_browser are set; using cookies_file.")
         config.cookies_from_browser = None
 
+    if config.impersonate:
+        config.impersonate = config.impersonate.strip() or None
+
     config.download_dir = Path(config.download_dir).expanduser()
 
 
@@ -574,6 +582,7 @@ def config_to_dict(config: AppConfig) -> dict[str, Any]:
             "proxy": config.proxy or "",
             "cookies_from_browser": config.cookies_from_browser or "",
             "cookies_file": str(config.cookies_file) if config.cookies_file else "",
+            "impersonate": config.impersonate or "",
         },
         "ui": {
             "ascii": config.ascii,

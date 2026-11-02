@@ -40,6 +40,16 @@ def test_print_config_with_cookies_file(
     assert f'cookies_file = "{cookies}"' in output
 
 
+def test_print_config_with_impersonate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    assert main(["--print-config", "--impersonate", "chrome"]) == 0
+    output = capsys.readouterr().out
+    assert 'impersonate = "chrome"' in output
+
+
 def test_write_default_config(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     target = tmp_path / "config.toml"
     assert main(["--config", str(target), "--write-default-config"]) == 0

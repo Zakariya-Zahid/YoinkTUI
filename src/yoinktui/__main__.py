@@ -98,6 +98,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Netscape-format cookies.txt file exported from a browser",
     )
     network.add_argument(
+        "--impersonate",
+        metavar="CLIENT[:OS]",
+        dest="impersonate",
+        help="client to impersonate for anti-bot bypass (e.g. chrome)",
+    )
+    network.add_argument(
         "--proxy",
         metavar="URL",
         help="proxy for yt-dlp, e.g. socks5://127.0.0.1:1080",
@@ -130,6 +136,7 @@ def _cli_overrides(args: argparse.Namespace) -> dict[str, object]:
         "theme": args.theme,
         "cookies_from_browser": args.cookies_from_browser,
         "cookies_file": args.cookies_file,
+        "impersonate": args.impersonate,
         "proxy": args.proxy,
         "extra_args": tuple(args.yt_dlp_args) if args.yt_dlp_args else None,
         "no_color": args.no_color,
@@ -158,6 +165,8 @@ def _run_doctor(config_path: Path | None) -> int:
         print(f"✓ cookies file: {config.cookies_file}")
     elif config.cookies_from_browser:
         print(f"✓ cookies from browser: {config.cookies_from_browser}")
+    if config.impersonate:
+        print(f"✓ impersonate client: {config.impersonate}")
     for warning in config.warnings:
         print(f"! {warning}")
     return 0 if report.ok else 1

@@ -126,8 +126,15 @@ Launch YoinkTUI with the same cookie and impersonation arguments:
 ```bash
 yoinktui \
   --cookies ~/cookies.txt \
-  --yt-dlp-arg=--impersonate \
-  --yt-dlp-arg=chrome
+  --impersonate chrome
+```
+
+Or configure both permanently in `~/.config/yoinktui/config.toml`:
+
+```toml
+[network]
+cookies_file = "~/cookies.txt"
+impersonate = "chrome"
 ```
 
 For a single lecture:

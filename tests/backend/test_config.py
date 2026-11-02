@@ -132,6 +132,15 @@ def test_missing_cookies_file_is_ignored(tmp_path: Path) -> None:
     assert any("does not exist" in warning for warning in config.warnings)
 
 
+def test_impersonate_is_passed_to_ytdlp(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('[network]\nimpersonate = "chrome"\n', encoding="utf-8")
+
+    config = load_config(path, env={})
+    assert config.impersonate == "chrome"
+    assert config.ytdlp_args == ["--impersonate", "chrome"]
+
+
 def test_precedence_file_then_env_then_cli(tmp_path: Path) -> None:
     path = tmp_path / "config.toml"
     path.write_text('[download]\nquality_cap = 720\ncontainer = "mkv"\n', encoding="utf-8")
