@@ -6,6 +6,16 @@ import os
 
 import pytest
 
+try:
+    import textual_image._terminal
+    from textual_image._terminal import CellSize, TerminalCapabilities
+
+    textual_image._terminal.probe_terminal = lambda: TerminalCapabilities(
+        cell_size=CellSize(width=10, height=20), sixel=False, tgp=False
+    )
+except (ImportError, AttributeError):
+    pass
+
 
 @pytest.fixture(autouse=True)
 def isolated_yoinktui_env(monkeypatch: pytest.MonkeyPatch) -> None:

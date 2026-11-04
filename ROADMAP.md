@@ -73,18 +73,18 @@ Phases overlap deliberately — modules advance independently.
 
 | # | Module | Doc | Status | Phase focus |
 |---|--------|-----|--------|-------------|
-| 01 | Download Engine | [01-download-engine](docs/plans/01-download-engine.md) | 🟡 | 1 |
-| 02 | Media Metadata & Extraction | [02-media-metadata](docs/plans/02-media-metadata.md) | 🟡 | 1 |
-| 03 | TUI Shell & Navigation | [03-tui-shell](docs/plans/03-tui-shell.md) | 🟡 | 1 |
-| 04 | Format Picker & Preview | [04-format-picker](docs/plans/04-format-picker.md) | 🟡 | 2 |
-| 05 | Download Manager & Queue | [05-download-manager](docs/plans/05-download-manager.md) | 🟡 | 2 |
-| 06 | Theming, A11y & Keybindings | [06-theming-accessibility](docs/plans/06-theming-accessibility.md) | 🔴 | 4 |
-| 07 | Configuration & Profiles | [07-configuration-profiles](docs/plans/07-configuration-profiles.md) | 🟡 | 1 |
-| 08 | History, Library & Persistence | [08-history-library](docs/plans/08-history-library.md) | 🟡 | 2 |
-| 09 | CLI & Automation | [09-cli-automation](docs/plans/09-cli-automation.md) | ⚪ | 3 |
-| 10 | Quality: Tests, CI & Types | [10-quality-testing](docs/plans/10-quality-testing.md) | 🟡 | 0 |
-| 11 | Packaging, Release & Distribution | [11-packaging-release](docs/plans/11-packaging-release.md) | 🟡 | 0 |
-| 12 | Performance, Resources & Diagnostics | [12-performance-diagnostics](docs/plans/12-performance-diagnostics.md) | 🔴 | 4 |
+| 01 | Download Engine | [01-download-engine](docs/plans/01-download-engine.md) | 🟢 | 1 |
+| 02 | Media Metadata & Extraction | [02-media-metadata](docs/plans/02-media-metadata.md) | 🟢 | 1 |
+| 03 | TUI Shell & Navigation | [03-tui-shell](docs/plans/03-tui-shell.md) | 🟢 | 1 |
+| 04 | Format Picker & Preview | [04-format-picker](docs/plans/04-format-picker.md) | 🟢 | 2 |
+| 05 | Download Manager & Queue | [05-download-manager](docs/plans/05-download-manager.md) | 🟢 | 2 |
+| 06 | Theming, A11y & Keybindings | [06-theming-accessibility](docs/plans/06-theming-accessibility.md) | 🟢 | 4 |
+| 07 | Configuration & Profiles | [07-configuration-profiles](docs/plans/07-configuration-profiles.md) | 🟢 | 1 |
+| 08 | History, Library & Persistence | [08-history-library](docs/plans/08-history-library.md) | 🟢 | 2 |
+| 09 | CLI & Automation | [09-cli-automation](docs/plans/09-cli-automation.md) | 🟢 | 3 |
+| 10 | Quality: Tests, CI & Types | [10-quality-testing](docs/plans/10-quality-testing.md) | 🟢 | 0 |
+| 11 | Packaging, Release & Distribution | [11-packaging-release](docs/plans/11-packaging-release.md) | 🟢 | 0 |
+| 12 | Performance, Resources & Diagnostics | [12-performance-diagnostics](docs/plans/12-performance-diagnostics.md) | 🟡 | 4 |
 
 ---
 
@@ -108,13 +108,11 @@ See [`CHANGELOG.md`](CHANGELOG.md) and [`docs/RELEASING.md`](docs/RELEASING.md).
 
 The first public release and tag remain v1.0.0.
 
-### v1.0.0 — "Product"
-- CLI flags + headless mode.
-- Accessibility pass (screen readers, no-color, ASCII mode).
-- PyPI wheel + `uv tool install`, Homebrew/AUR formulae.
-- i18n scaffolding and documentation site.
-
----
+### v1.0.0 — "Product" — ✅ implemented
+- [x] Headless CLI mode (`yoinktui <URL>`, `-q`, `--json`, batch input `-`, `--yes-playlist`, `--playlist-items`, deterministic exit codes).
+- [x] Accessibility pass (high-contrast theme, `--no-color`, ASCII mode, `?`/`F1` help overlay modal, documented keyboard contract).
+- [x] TLS Impersonation (`--impersonate`) and actionable HTTP 403 guidance.
+- [x] Packaging & Release automation (v1.0.0 bump, Production/Stable classifier, `.github/workflows/release.yml`, `SECURITY.md`).
 
 ## 7. Cross-cutting KPIs
 

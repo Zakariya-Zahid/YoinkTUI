@@ -21,6 +21,12 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="yoinktui",
         description="Steam-style TUI download manager powered by yt-dlp.",
     )
+    parser.add_argument(
+        "urls",
+        nargs="*",
+        metavar="URL",
+        help="media URL(s) to download without TUI (or '-' for stdin)",
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument(
         "--config",
@@ -46,10 +52,37 @@ def _build_parser() -> argparse.ArgumentParser:
 
     download = parser.add_argument_group("download options")
     download.add_argument(
+        "-o",
+        "--output-dir",
         "--download-dir",
         type=Path,
+        dest="download_dir",
         metavar="DIR",
         help="where downloads are saved (default: ~/Videos/yoinktui)",
+    )
+    download.add_argument(
+        "-f",
+        "--format",
+        dest="format_selector",
+        metavar="FORMAT",
+        help="format selector for yt-dlp (e.g. 137, bestvideo+bestaudio)",
+    )
+    download.add_argument(
+        "-m",
+        "--mode",
+        dest="mode",
+        choices=("video", "vonly", "audio"),
+        help="download mode: video, vonly, or audio",
+    )
+    download.add_argument(
+        "--preset",
+        metavar="NAME",
+        help="apply download settings from a named preset (e.g. music, phone)",
+    )
+    download.add_argument(
+        "--output-template",
+        metavar="TEMPLATE",
+        help="custom yt-dlp output template (e.g. '%%(title)s.%%(ext)s')",
     )
     download.add_argument(
         "--quality-cap",
@@ -81,7 +114,112 @@ def _build_parser() -> argparse.ArgumentParser:
         help="mode preselected on the format screen",
     )
     download.add_argument(
+        "--write-subtitles",
+        "--write-subs",
+        action="store_true",
+        default=None,
+        dest="write_subtitles",
+        help="download and embed subtitles",
+    )
+    download.add_argument(
+        "--no-write-subtitles",
+        "--no-subs",
+        action="store_false",
+        dest="write_subtitles",
+        help="do not download subtitles",
+    )
+    download.add_argument(
+        "--embed-metadata",
+        action="store_true",
+        default=None,
+        dest="embed_metadata",
+        help="embed metadata tags into media file",
+    )
+    download.add_argument(
+        "--no-embed-metadata",
+        action="store_false",
+        dest="embed_metadata",
+        help="do not embed metadata tags",
+    )
+    download.add_argument(
+        "--embed-thumbnail",
+        action="store_true",
+        default=None,
+        dest="embed_thumbnail",
+        help="embed cover/thumbnail artwork into media file",
+    )
+    download.add_argument(
+        "--no-embed-thumbnail",
+        action="store_false",
+        dest="embed_thumbnail",
+        help="do not embed cover artwork",
+    )
+    download.add_argument(
+        "--keep-original",
+        action="store_true",
+        default=None,
+        dest="keep_original",
+        help="keep original video/audio files after extraction or merging",
+    )
+    download.add_argument(
         "--theme", metavar="NAME", help="theme name (dark/light or a Textual theme)"
+    )
+
+    playlist = parser.add_argument_group("playlist options")
+    playlist.add_argument(
+        "--yes-playlist",
+        action="store_true",
+        help="download the entire playlist if URL refers to one",
+    )
+    playlist.add_argument(
+        "--no-playlist",
+        action="store_true",
+        help="only download single video if URL has both video and playlist",
+    )
+    playlist.add_argument(
+        "--playlist-items",
+        metavar="ITEMS",
+        help="playlist item indices to download (e.g. '1,2,5-8')",
+    )
+
+    automation = parser.add_argument_group("headless & automation options")
+    automation.add_argument(
+        "-a",
+        "--batch-file",
+        type=Path,
+        metavar="FILE",
+        help="file containing URLs to download (one per line, or '-' for stdin)",
+    )
+    automation.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="suppress download progress output (errors still print to stderr)",
+    )
+    automation.add_argument(
+        "--json",
+        action="store_true",
+        help="stream progress and results as newline-delimited JSON (NDJSON)",
+    )
+    automation.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="simulate download; probe metadata and print plan without fetching media",
+    )
+    automation.add_argument(
+        "--print-command",
+        action="store_true",
+        help="print the exact yt-dlp command line invocation",
+    )
+    automation.add_argument(
+        "--no-history",
+        action="store_true",
+        help="do not record downloads in the SQLite history/library database",
+    )
+    automation.add_argument(
+        "--tui",
+        action="store_true",
+        help="launch the interactive TUI even if a URL is provided",
     )
 
     network = parser.add_argument_group("network options")
@@ -124,7 +262,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _cli_overrides(args: argparse.Namespace) -> dict[str, object]:
-    return {
+    overrides: dict[str, object] = {
         "download_dir": args.download_dir,
         "quality_cap": args.quality_cap,
         "container": args.container,
@@ -132,7 +270,7 @@ def _cli_overrides(args: argparse.Namespace) -> dict[str, object]:
         "audio_quality": args.audio_quality,
         "concurrent_fragments": args.concurrent_fragments,
         "rate_limit": args.rate_limit,
-        "default_mode": args.default_mode,
+        "default_mode": args.mode or args.default_mode,
         "theme": args.theme,
         "cookies_from_browser": args.cookies_from_browser,
         "cookies_file": args.cookies_file,
@@ -142,6 +280,15 @@ def _cli_overrides(args: argparse.Namespace) -> dict[str, object]:
         "no_color": args.no_color,
         "ascii": args.ascii,
     }
+    if getattr(args, "write_subtitles", None) is not None:
+        overrides["write_subtitles"] = args.write_subtitles
+    if getattr(args, "embed_metadata", None) is not None:
+        overrides["embed_metadata"] = args.embed_metadata
+    if getattr(args, "embed_thumbnail", None) is not None:
+        overrides["embed_thumbnail"] = args.embed_thumbnail
+    if getattr(args, "keep_original", None) is not None:
+        overrides["keep_original"] = args.keep_original
+    return overrides
 
 
 def _run_doctor(config_path: Path | None) -> int:
@@ -197,12 +344,22 @@ def main(argv: list[str] | None = None) -> int:
             print(f"warning: {warning}", file=sys.stderr)
         return 0
 
-    for warning in config.warnings:
-        print(f"warning: {warning}", file=sys.stderr)
+    if not args.quiet:
+        for warning in config.warnings:
+            print(f"warning: {warning}", file=sys.stderr)
+
+    is_headless = not args.tui and bool(
+        args.urls or args.batch_file or args.dry_run or args.print_command
+    )
+    if is_headless:
+        from yoinktui.cli import run_headless
+
+        return run_headless(args, config)
 
     from yoinktui.app import YoinkTUIApp
 
-    app = YoinkTUIApp(config=config)
+    initial_url = args.urls[0] if args.urls else ""
+    app = YoinkTUIApp(config=config, initial_url=initial_url)
     app.run()
     return 0
 

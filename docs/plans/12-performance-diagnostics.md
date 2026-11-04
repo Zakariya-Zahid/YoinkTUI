@@ -10,15 +10,12 @@ resource limits, logging, and the support surface that makes bugs fixable.
 
 ## 2. Current state
 
-- All I/O is already off the UI thread (`@work(thread=True)`), good baseline.
-- `set_interval` timers (elapsed tick, probe spinner, thumbnail placeholder)
-  are not explicitly stopped on unmount — potential leaks.
-- No logging anywhere; errors surface as strings in modals/toasts only.
-- No `--doctor`/`--version` diagnostics; `tool_available()` unused.
-- Thumbnails decoded in-memory without a size cap.
-- No stall/timeout handling on silent downloads.
-- Fixed layouts (`min-height: 22`, `right-pane: 60`) risk poor behaviour on
-  small or very large terminals.
+- All I/O is off the UI thread (`@work(thread=True)`), robust non-blocking baseline.
+- `yoinktui --doctor` reports full diagnostic pre-flight: yt-dlp & ffmpeg versions, paths, config path, and download dir permissions.
+- Typed errors (`DownloadError` + `ErrorReason`) map root causes (disk, network, auth, not found, geo, muxing) to actionable user hints.
+- Stall/timeout detection actively terminates stalled transfers with `stall_timeout`.
+- Thumbnails render via `textual-image` with terminal protocol fallback.
+- Responsive layout handles 80×24 up to ultrawide without crashing.
 
 ## 3. Goals
 

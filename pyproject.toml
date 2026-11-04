@@ -1,6 +1,6 @@
 [project]
 name = "yoinktui"
-version = "0.3.0"
+version = "1.0.0"
 description = "Steam-style TUI download manager for YouTube and 1000+ sites via yt-dlp + ffmpeg"
 readme = "README.md"
 license = "MIT"
@@ -11,7 +11,7 @@ authors = [
 requires-python = ">=3.12"
 keywords = ["youtube", "download", "tui", "yt-dlp", "terminal", "textual"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
     "Operating System :: MacOS",

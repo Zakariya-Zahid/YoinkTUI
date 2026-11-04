@@ -28,7 +28,7 @@ class ErrorReason(StrEnum):
 _HINTS: dict[ErrorReason, str] = {
     ErrorReason.NETWORK: "Check your connection and try again.",
     ErrorReason.GEO: "This media is blocked in your region.",
-    ErrorReason.AUTH: "The site needs a logged-in session or fresh cookies.",
+    ErrorReason.AUTH: "The site needs a logged-in session, fresh cookies, or browser impersonation.",
     ErrorReason.NOT_FOUND: "The URL may be private, deleted, or mistyped.",
     ErrorReason.DISK: "There is not enough free space on the destination drive.",
     ErrorReason.FFMPEG_MISSING: "ffmpeg is required to merge or post-process media.",
@@ -41,7 +41,7 @@ _HINTS: dict[ErrorReason, str] = {
 _ACTIONS: dict[ErrorReason, str] = {
     ErrorReason.NETWORK: "Retry in a moment.",
     ErrorReason.GEO: "Try --proxy or a VPN, then retry.",
-    ErrorReason.AUTH: "Try --cookies-from-browser firefox (or chrome/brave).",
+    ErrorReason.AUTH: "Try --cookies FILE, --cookies-from-browser BROWSER, or --impersonate chrome.",
     ErrorReason.NOT_FOUND: "Check the URL in a browser, then retry.",
     ErrorReason.DISK: "Free some space or pass --download-dir DIR.",
     ErrorReason.FFMPEG_MISSING: "Install ffmpeg and make sure it is on PATH.",

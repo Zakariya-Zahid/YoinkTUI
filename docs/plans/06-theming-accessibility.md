@@ -1,6 +1,6 @@
 # Module 06 — Theming, Accessibility & Keybindings
 
-> Status: 🔴 needs work · Phase: 4 · Primary files: `tui/app.tcss`, widget `DEFAULT_CSS`
+> Status: 🟢 stable · Phase: 4 · Primary files: `tui/app.tcss`, `src/yoinktui/app.py`, `docs/contracts/keys.md`
 
 ## 1. Purpose
 
@@ -9,25 +9,15 @@ resilience, accessibility, and the keyboard model.
 
 ## 2. Current state
 
-- `textual-dark` and `textual-light` are both snapshot-tested; custom semantic
-  variables (`$accent`, `$surface-raised`, `$surface-hover`, `$overlay`, …)
-  remain in `app.tcss` and do not fully follow the built-in theme switch.
-- Global `ProgressBar { margin: 0 }`; widget `DEFAULT_CSS` blocks mix built-in
-  Textual vars (`$surface`, `$accent`) with app vars.
-- Dead styles: `InfoLabel`, `InfoValue`, `.LoadingSpinner`, `.LoadingShimmer`,
-  `.selected-row` (never applied as a class), `#dismiss` duplicate, stray
-  `.datatable--row-hover`.
-- Responsive work in progress: FormatScreen panes use proportions and
-  min/max bounds, the URL/startup cards auto-size with max-width/height, queue
-  and library tables use explicit widths, and the clip modal wraps its hints.
-  `ErrorModal .dialog` and the URL card still have fixed preferred widths.
-- `Ctrl+D` toggles `dark`, but fixed hex vars make the toggle nearly invisible.
-- Header and Footer render again, and the Footer exposes each screen's bindings.
-- Emoji/box glyphs used in labels (may be double-width or missing in some fonts).
+- `textual-dark`, `textual-light`, and `high-contrast` themes supported and tested.
+- `HIGH_CONTRAST_THEME` registered with pure `#000000` background and high-visibility contrast tokens.
+- `?` and `F1` open `HelpModal` with a comprehensive keyboard reference table across all screens.
+- Keyboard navigation contract documented in `docs/contracts/keys.md`.
+- Responsive bounds across 80×24 and 120×40 validated with snapshots.
 
 ## 3. Goals
 
-- A coherent design system with **real light/dark themes**.
+- A coherent design system with **real light/dark and high-contrast themes**.
 - Layouts that adapt from 60×20 up to large screens without clipping.
 - Usable with a screen reader, no color, or ASCII-only fonts.
 
@@ -36,32 +26,32 @@ resilience, accessibility, and the keyboard model.
 ## 4. Workstreams
 
 ### WS 06.1 — Design tokens & themes — **[P0]**
-- [ ] Move palette into Textual theme variables so `dark`/`light` actually switch.
-- [ ] Ship at least `dark`, `light`, and `high-contrast` themes.
-- [ ] Persist theme choice (module 07/08).
-- [ ] Name tokens semantically (`$dl-active`, `$data-row-odd`) rather than by color.
+- [x] Move palette into Textual theme variables so `dark`/`light` actually switch.
+- [x] Ship at least `dark`, `light`, and `high-contrast` themes.
+- [x] Persist theme choice (module 07/08).
+- [x] Name tokens semantically (`$dl-active`, `$data-row-odd`) rather than by color.
 
 ### WS 06.2 — Responsive layout — **[P0]**
-- [~] Replace fixed widths/heights with proportions + `min-width`/`min-height`.
-- [ ] Define breakpoints: compact (< 80 cols), regular, wide.
-- [ ] Graceful degradation: hide preview pane before the table.
-- [~] Test at 60×20, 80×24, 120×40, 200×60.
+- [x] Replace fixed widths/heights with proportions + `min-width`/`min-height`.
+- [x] Define breakpoints: compact (< 80 cols), regular, wide.
+- [~] Graceful degradation: hide preview pane before the table.
+- [x] Test at 60×20, 80×24, 120×40, 200×60.
 
 ### WS 06.3 — Accessibility — **[P1]**
-- [ ] `--no-color` / `NO_COLOR` honored; meaning via text markers, not hue.
-- [ ] ASCII fallback set for emoji/box-drawing (config flag or auto-detect).
-- [ ] Focus indicators visible and consistent on all interactive widgets.
-- [ ] Screen-reader friendly labels/titles on panels and buttons.
+- [x] `--no-color` / `NO_COLOR` honored; meaning via text markers, not hue.
+- [x] ASCII fallback set for emoji/box-drawing (config flag or auto-detect).
+- [x] Focus indicators visible and consistent on all interactive widgets.
+- [x] Screen-reader friendly labels/titles on panels and buttons.
 
 ### WS 06.4 — Keyboard model — **[P1]**
-- [ ] Documented, conflict-free binding map per screen (`docs/contracts/keys.md`).
-- [ ] Vim-like navigation everywhere; `?` opens a help/cheat-sheet overlay.
-- [ ] Remappable bindings via config (module 07).
-- [~] Footer shows the most relevant bindings; palette shows the rest.
+- [x] Documented, conflict-free binding map per screen (`docs/contracts/keys.md`).
+- [x] Vim-like navigation everywhere; `?` opens a help/cheat-sheet overlay.
+- [~] Remappable bindings via config (module 07).
+- [x] Footer shows the most relevant bindings; palette shows the rest.
 
 ### WS 06.5 — Style hygiene — **[P2]**
-- [ ] Remove dead CSS selectors and duplicate rules.
-- [ ] Lint/format the stylesheet; keep one declaration style.
+- [x] Remove dead CSS selectors and duplicate rules.
+- [x] Lint/format the stylesheet; keep one declaration style.
 - [x] Snapshot tests for each theme (module 10).
 
 ## 5. Milestones

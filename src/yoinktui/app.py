@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from textual.app import App
 from textual.binding import Binding
+from textual.theme import Theme
 
 from yoinktui.backend.config import AppConfig, load_config, load_last_url
 from yoinktui.backend.library import LibraryStore
@@ -15,6 +16,37 @@ from yoinktui.backend.models import FormatInfo, MediaInfo
 from yoinktui.backend.queue import DownloadQueue, QueueStore
 from yoinktui.backend.ytdlp import DependencyReport, check_dependencies
 from yoinktui.tui.screens import QueueScreen, StartupErrorScreen, UrlScreen
+
+HIGH_CONTRAST_THEME = Theme(
+    name="high-contrast",
+    primary="#ffffff",
+    secondary="#ffff00",
+    accent="#00ffff",
+    foreground="#ffffff",
+    background="#000000",
+    surface="#000000",
+    panel="#000000",
+    warning="#ffff00",
+    error="#ff4444",
+    success="#44ff44",
+    dark=True,
+    variables={
+        "bg": "#000000",
+        "surface": "#000000",
+        "surface-raised": "#111111",
+        "surface-hover": "#222222",
+        "text": "#ffffff",
+        "text-muted": "#cccccc",
+        "accent": "#00ffff",
+        "accent-dim": "#00ffff80",
+        "warning": "#ffff00",
+        "error": "#ff4444",
+        "success": "#44ff44",
+        "border": "#ffffff",
+        "border-focus": "#ffff00",
+        "overlay": "#000000f0",
+    },
+)
 
 __all__ = ["AppConfig", "AppState", "YoinkTUIApp", "load_config"]
 
@@ -45,11 +77,20 @@ class YoinkTUIApp(App):
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", show=True),
         Binding("ctrl+d", "toggle_dark", "Toggle theme", show=True),
+        Binding("question_mark", "help", "Help", key_display="?", show=True),
+        Binding("f1", "help", "Help", show=False),
     ]
 
     config: AppConfig
 
-    def __init__(self, config: AppConfig | None = None, *, state: AppState | None = None) -> None:
+    def __init__(
+        self,
+        config: AppConfig | None = None,
+        *,
+        state: AppState | None = None,
+        initial_url: str = "",
+    ) -> None:
+        self.initial_url = initial_url
         resolved = config or load_config()
         # Textual reads NO_COLOR in App.__init__ and installs its monochrome
         # line filter.  Bridge our config value to it without leaking the env
@@ -66,6 +107,8 @@ class YoinkTUIApp(App):
                 else:
                     os.environ["NO_COLOR"] = previous_no_color
         self.config = resolved
+        with contextlib.suppress(Exception):
+            self.register_theme(HIGH_CONTRAST_THEME)
         try:
             self.library = LibraryStore()
             self.library.mark_interrupted()
@@ -95,14 +138,17 @@ class YoinkTUIApp(App):
             return
         for warning in (*report.warnings, *self.config.warnings):
             self.notify(warning, severity="warning", timeout=10, markup=False)
-        self.push_screen(UrlScreen())
+        self.push_screen(UrlScreen(initial_url=self.initial_url))
         if self.state.queue.has_resumable():
             self.push_screen(QueueScreen(queue=self.state.queue))
 
     def _apply_theme(self) -> None:
         theme = (self.config.theme or "").strip()
         lowered = theme.lower()
-        if lowered in ("dark", "textual-dark"):
+        if lowered in ("high-contrast", "highcontrast"):
+            self.theme = "high-contrast"
+            self.dark = True
+        elif lowered in ("dark", "textual-dark"):
             self.theme = "textual-dark"
             self.dark = True
         elif lowered in ("light", "textual-light"):
@@ -120,6 +166,12 @@ class YoinkTUIApp(App):
 
     def action_toggle_dark(self) -> None:
         self.dark = not self.dark
+        self.theme = "textual-dark" if self.dark else "textual-light"
+
+    def action_help(self) -> None:
+        from yoinktui.tui.screens import HelpModal
+
+        self.push_screen(HelpModal())
 
     async def action_quit(self) -> None:
         """Cancel workers before exiting so external tools don't become orphans."""

@@ -644,6 +644,69 @@ class ConfirmModal(ModalScreen[bool]):
         self.dismiss(True)
 
 
+class HelpModal(ModalScreen[None]):
+    """Comprehensive keyboard shortcuts and help overlay."""
+
+    BINDINGS = [
+        ("escape", "dismiss", "Close"),
+        ("enter", "dismiss", "Close"),
+        ("q", "dismiss", "Close"),
+        ("question_mark", "dismiss", "Close"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="dialog help-dialog"):
+            yield Static("⌨  YoinkTUI Keyboard Shortcuts & Help", classes="title")
+            yield Static(
+                "Navigate via arrow keys, j/k, or Tab. Press Esc to return to the previous screen.",
+                classes="clip-hint",
+            )
+            table: DataTable[str] = DataTable(id="help-table", cursor_type="row")
+            yield table
+            with Horizontal(classes="clip-actions"):
+                yield Button("Close (Esc)", variant="primary", id="help-close")
+
+    def on_mount(self) -> None:
+        table = self.query_one("#help-table", DataTable)
+        table.add_columns("Context", "Key", "Action")
+        entries = [
+            ("Global", "? / F1", "Toggle this shortcuts & help overlay"),
+            ("Global", "Ctrl+D", "Toggle dark / light theme"),
+            ("Global", "Ctrl+Q", "Quit application cleanly"),
+            ("URL Screen", "Enter", "Probe URL and discover available formats"),
+            ("URL Screen", "Tab / Shift+Tab", "Navigate between URL input and action buttons"),
+            ("URL Screen", "P / Q / L", "Jump directly to Playlist, Queue, or Library"),
+            ("Format Screen", "↑ / k , ↓ / j", "Browse available video and audio streams"),
+            ("Format Screen", "1", "Select Video + Audio mode"),
+            ("Format Screen", "2", "Select Video Only mode"),
+            ("Format Screen", "3", "Select Audio Only mode"),
+            ("Format Screen", "D", "Start download immediately with highlighted format"),
+            ("Format Screen", "Q", "Enqueue highlighted format for later download"),
+            ("Format Screen", "C", "Trim timecode section (Clip modal)"),
+            ("Format Screen", "P", "Apply named preset (Music, Archive, Mobile)"),
+            ("Format Screen", "Esc", "Return to URL screen"),
+            ("Queue / Playlist", "Space / Enter", "Toggle selection for highlighted item"),
+            ("Queue / Playlist", "Ctrl+A", "Select all items in table"),
+            ("Queue / Playlist", "Ctrl+Shift+A", "Deselect all items"),
+            ("Queue / Playlist", "D", "Download / queue selected items"),
+            ("Queue / Playlist", "R / Delete", "Remove selected item(s) from queue"),
+            ("Download Screen", "Space", "Pause or resume active download (POSIX)"),
+            ("Download Screen", "C / Esc", "Cancel active download"),
+            ("Library Screen", "O", "Open downloaded file or folder"),
+            ("Library Screen", "D", "Re-download selected entry"),
+            ("Library Screen", "Delete", "Delete entry from library"),
+        ]
+        for idx, (ctx, key, action) in enumerate(entries):
+            table.add_row(f"[bold]{ctx}[/bold]", f"[cyan]{key}[/cyan]", action, key=str(idx))
+        table.focus()
+        if entries:
+            table.move_cursor(row=0)
+
+    @on(Button.Pressed, "#help-close")
+    def _on_close_pressed(self, _: Button.Pressed) -> None:
+        self.dismiss(None)
+
+
 class PlaylistScreen(Screen):
     """Preview a flat playlist, then enqueue every entry."""
 

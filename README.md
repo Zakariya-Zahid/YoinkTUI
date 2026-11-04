@@ -59,14 +59,19 @@ TUI download manager for YouTube (and 1000+ sites) via **yt-dlp** + **ffmpeg**.
 Requires Python 3.12+, `yt-dlp`, and `ffmpeg` on your `PATH`.
 
 ```bash
+# Via uv tool (recommended)
+uv tool install yoinktui
+
+# Via pipx
+pipx install yoinktui
+```
+
+Or install from source:
+
+```bash
 git clone https://github.com/Zakariya-Zahid/YoinkTUI.git
 cd YoinkTUI
 uv sync
-```
-
-For a global install from the checkout:
-
-```bash
 uv tool install -e .
 yoinktui --doctor
 ```
@@ -209,6 +214,39 @@ Downloads use yt-dlp `--continue`, so a partially written `.part` file resumes
 where it left off. Quitting mid-download records the active item as
 `interrupted` in history; queued downloads are offered for resume on the next
 launch.
+
+### Headless CLI & Automation
+
+YoinkTUI can run headlessly for scripts, cron jobs, and terminal automation without launching the TUI:
+
+```bash
+# Direct download using your config defaults
+yoinktui "https://www.youtube.com/watch?v=..."
+
+# Custom output directory, format selector, or mode
+yoinktui URL -o ~/Downloads -f bestvideo+bestaudio
+yoinktui URL -m audio --preset music
+
+# Automation: stream progress as NDJSON or run quietly
+yoinktui URL --json
+yoinktui URL --quiet
+
+# Inspection and command preview
+yoinktui URL --dry-run
+yoinktui URL --dry-run --print-command
+
+# Batch downloads from a file or stdin
+yoinktui --batch-file urls.txt
+cat urls.txt | yoinktui -
+
+# Playlists
+yoinktui "https://www.youtube.com/playlist?list=..." --yes-playlist --playlist-items 1-5
+
+# Force launching the TUI with a prefilled URL
+yoinktui URL --tui
+```
+
+Structured exit codes are returned for scripting (`0`: success, `10`: network, `11`: auth/cookies, `12`: geo, `13`: not found, `14`: disk, `15`: dependency missing, `16`: unsupported URL, `17`: no streams, `130`: cancelled).
 
 ### Cookies and proxy
 

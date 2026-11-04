@@ -524,6 +524,35 @@ PresetModal .clip-actions Button {
     margin-left: 1;
 }
 
+/* Help modal */
+HelpModal {
+    align: center middle;
+    background: $background 60%;
+}
+HelpModal .dialog {
+    width: 86;
+    max-width: 95%;
+    height: auto;
+    max-height: 90%;
+    background: $surface-raised;
+    border: thick $accent;
+    padding: 1 3;
+    overflow-y: auto;
+}
+HelpModal .title {
+    color: $accent;
+    text-style: bold;
+    margin-bottom: 1;
+}
+HelpModal DataTable {
+    height: auto;
+    max-height: 18;
+}
+HelpModal .clip-actions {
+    margin-top: 1;
+    align: right middle;
+}
+
 ErrorModal {
     align: center middle;
     background: $background 60%;

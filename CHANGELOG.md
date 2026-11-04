@@ -4,7 +4,33 @@ All notable changes to YoinkTUI are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] — "Power user" — unreleased (internal milestone)
+## [1.0.0] — "Product" — 2026-11-04
+
+First official stable release of YoinkTUI! Adds full headless CLI automation, accessibility & help overlays, high-contrast theming, TLS impersonation, and automated GitHub Actions release publishing.
+
+### Added
+
+- **Headless CLI Mode**:
+  - Run non-interactive downloads directly with `yoinktui <URL>`.
+  - Machine-readable NDJSON streaming progress output via `--json`.
+  - Script-friendly quiet mode via `-q` / `--quiet`.
+  - Dry-run validation via `--dry-run` and yt-dlp argument inspection via `--print-command`.
+  - Batch URL processing from files or standard input using `--batch-file FILE` or `--batch-file -`.
+  - Headless playlist extraction and download with `--yes-playlist` and index selection via `--playlist-items` (e.g. `1,3,5-8`).
+  - Command-line policy overrides: `-o/--output-dir`, `-f/--format`, `-m/--mode`, `--preset`, and `--output-template`.
+  - Deterministic exit codes: `0` (success), `10` (generic error), `11` (network/connectivity), `12` (auth/403), `13` (not found/404), `14` (geo restriction), `15` (unsupported URL/extractor), `16` (ffmpeg/muxing error), `17` (disk space/permissions), `130` (cancelled/SIGINT).
+- **Accessibility & Theming**:
+  - High-contrast theme (`yoink-high-contrast`) featuring true `#000000` background and high-visibility tokens.
+  - Interactive Help Modal (`?` or `F1`): on-demand keyboard reference table overlay.
+  - Comprehensive keyboard contract documentation (`docs/contracts/keys.md`).
+- **Network & Impersonation**:
+  - TLS client impersonation support via `--impersonate BROWSER` (e.g. `--impersonate chrome` via `curl_cffi`) and config setting `[network].impersonate`.
+  - Enhanced HTTP 403 error guidance recommending `--cookies FILE`, `--cookies-from-browser BROWSER`, or `--impersonate chrome`.
+- **Release Automation**:
+  - Tag-triggered GitHub Actions release workflow (`.github/workflows/release.yml`) for PyPI Trusted Publishing and GitHub Release generation.
+  - Vulnerability reporting policy in `SECURITY.md`.
+
+## [0.3.0] — "Power user" — 2026-11-03
 
 Phase 2 "power user" work. This version is an internal development milestone;
 the first public release remains v1.0.0.
@@ -150,4 +176,6 @@ and 11 is in place.
 - Thumbnail rendering through `textual-image`.
 - Cookies, proxy, and extra yt-dlp argument passthrough.
 
+[1.0.0]: https://github.com/Zakariya-Zahid/YoinkTUI/compare/v0.3.0...v1.0.0
+[0.3.0]: https://github.com/Zakariya-Zahid/YoinkTUI/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Zakariya-Zahid/YoinkTUI/compare/v0.1.0...v0.2.0

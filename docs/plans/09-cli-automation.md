@@ -1,7 +1,7 @@
 # Module 09 — CLI & Automation
 
-> Status: ⚪ not started · Phase: 3 · Primary files: `__main__.py`,
-> *(new)* `src/yoinktui/cli.py`
+> Status: 🟢 completed (M1–M2) · Phase: 3 · Primary files: `__main__.py`,
+> `src/yoinktui/cli.py`
 
 ## 1. Purpose
 
@@ -10,8 +10,13 @@ downloading, config management, and hooks that let other tools drive us.
 
 ## 2. Current state
 
-- `main()` only launches the TUI; no arguments, no subcommands, no output mode.
-- The engine (`download()`) is already scriptable in-process.
+- Headless downloading via `yoinktui <URL>` without launching the TUI.
+- Full flag surface: `-o/--output-dir`, `-f/--format`, `-m/--mode`, `--preset`,
+  `--output-template`, quality/container/audio flags, post-processing options.
+- Automation features: `-q/--quiet`, `--json` NDJSON stream, `--dry-run`,
+  `--print-command`, `--batch-file` / stdin (`-`), `--yes-playlist`,
+  `--playlist-items`.
+- Structured, stable exit codes mapped from backend `ErrorReason`.
 
 ## 3. Goals
 
@@ -24,24 +29,24 @@ downloading, config management, and hooks that let other tools drive us.
 ## 4. Workstreams
 
 ### WS 09.1 — Argument surface — **[P1]**
-- [ ] `yoinktui [URL]` — TUI when no URL, direct download when given.
-- [ ] Flags: `-o/--output-dir`, `-f/--format`, `-m/--mode`,
+- [x] `yoinktui [URL]` — TUI when no URL, direct download when given.
+- [x] Flags: `-o/--output-dir`, `-f/--format`, `-m/--mode`,
       `--quality-cap`, `--container`, `--audio-format`, `--proxy`,
       `--cookies-from-browser`, `-q/--quiet`, `--json`, `--dry-run`.
-- [ ] Global: `--config PATH`, `--print-config`, `--write-default-config`,
+- [x] Global: `--config PATH`, `--print-config`, `--write-default-config`,
       `--version`, `--doctor`.
-- [ ] Precedence: flags > env > config file > defaults (tested).
+- [x] Precedence: flags > env > config file > defaults (tested).
 
 ### WS 09.2 — Non-interactive mode — **[P1]**
-- [ ] Plain/quiet progress to stdout; `--json` NDJSON event stream.
-- [ ] Meaningful exit codes per error class (module 01 taxonomy).
-- [ ] `--yes-playlist` / `--playlist-items` passthrough.
-- [ ] Batch mode: read URLs from stdin / a file.
+- [x] Plain/quiet progress to stdout; `--json` NDJSON event stream.
+- [x] Meaningful exit codes per error class (module 01 taxonomy).
+- [x] `--yes-playlist` / `--playlist-items` passthrough.
+- [x] Batch mode: read URLs from stdin / a file.
 
 ### WS 09.3 — yt-dlp passthrough & escape hatch — **[P2]**
-- [ ] `--ytdlp-arg=…` (repeatable) forwarded verbatim.
-- [ ] `--print-command` to show the exact invocation (shared with 05.4).
-- [ ] Pass-through for advanced users without polluting the config schema.
+- [x] `--ytdlp-arg=…` (repeatable) forwarded verbatim.
+- [x] `--print-command` to show the exact invocation (shared with 05.4).
+- [x] Pass-through for advanced users without polluting the config schema.
 
 ### WS 09.4 — Integration hooks — **[P2]**
 - [ ] Completion hook: run a user command with file path + metadata
