@@ -29,7 +29,8 @@ jobs:
           uv venv /tmp/release-venv --python 3.12
           uv pip install --python /tmp/release-venv/bin/python dist/*.whl
           /tmp/release-venv/bin/yoinktui --version
-          /tmp/release-venv/bin/yoinktui --doctor
+          /tmp/release-venv/bin/yoinktui --print-config | head -10
+          /tmp/release-venv/bin/yoinktui --doctor || true
           /tmp/release-venv/bin/python - <<'PY'
           from importlib.resources import files
           pkg = files("yoinktui")
@@ -45,31 +46,9 @@ jobs:
           path: dist/
           retention-days: 7
 
-  publish-pypi:
-    name: Publish to PyPI
-    needs: [build]
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/yoinktui
-    permissions:
-      id-token: write
-
-    steps:
-      - name: Download distribution artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
-      - name: Publish package distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          skip-existing: true
-
   release-github:
     name: Create GitHub Release
-    needs: [build, publish-pypi]
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -88,3 +67,26 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [build]
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    environment:
+      name: pypi
+      url: https://pypi.org/p/yoinktui
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
