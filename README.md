@@ -39,19 +39,22 @@ TUI download manager for YouTube (and 1000+ sites) via **yt-dlp** + **ffmpeg**.
 
 ## Live Demo
 <p align="center">
-  <a href="https://github.com/user-attachments/assets/4d92a270-7695-44be-a0ad-ab9ccb74ca62">Watch the Demo</a>
+  Watch it: https://go.screenpal.com/watch/cOXhYNn4nQa
 </p>
 
 ## Screenshots
 
 <p align="center">
-  <img src="assets/main.png" alt="YoinkTUI URL screen" width="100%">
+ <img width="1920" height="1080" alt="main" src="https://github.com/user-attachments/assets/3ebfe306-4b5e-4d3f-b218-461a8a030fa4" />
+<p align="center">
+  <br>
+  <img width="1920" height="1080" alt="Screenshot from 2026-11-06 01-32-54" src="https://github.com/user-attachments/assets/08a49626-5681-40b5-9604-c1dda23a1d3b" />
   <br><br>
-  <img src="assets/Video_Url.png" alt="YoinkTUI format picker" width="100%">
-  <br><br>
-  <img src="assets/Dashboard.png" alt="YoinkTUI download dashboard" width="100%">
-  <br><br>
-  <img src="assets/Download_Section.png" alt="YoinkTUI download in progress" width="100%">
+<img width="1920" height="1080" alt="Download_Section" src="https://github.com/user-attachments/assets/23e77e8e-148c-418a-babc-a3bb86b24230" />
+  <br>
+  <img width="1920" height="1080" alt="Screenshot from 2026-11-06 01-33-28" src="https://github.com/user-attachments/assets/df43fc0d-d74a-4896-9e57-132b1880ceb6" />
+ <br>
+  <img width="1920" height="1080" alt="Screenshot from 2026-11-06 01-33-58" src="https://github.com/user-attachments/assets/22c00f08-28b4-4832-9e27-e375e2479af3" />
 </p>
 
 ## Install
