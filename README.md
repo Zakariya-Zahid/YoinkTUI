@@ -39,7 +39,7 @@ TUI download manager for YouTube (and 1000+ sites) via **yt-dlp** + **ffmpeg**.
 
 ## Live Demo
 <p align="center">
-  Watch it: https://go.screenpal.com/watch/cOXhYNn4nQa
+  Watch it: https://vimeo.com/1244018819/fe9018b365?share=copy&fl=sv&fe=ci
 </p>
 
 ## Screenshots
