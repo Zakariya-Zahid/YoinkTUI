@@ -4,7 +4,7 @@ All notable changes to YoinkTUI are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.1] — 2026-11-09
 
 ### Added
 
@@ -190,6 +190,7 @@ and 11 is in place.
 - Thumbnail rendering through `textual-image`.
 - Cookies, proxy, and extra yt-dlp argument passthrough.
 
+[1.0.1]: https://github.com/Zakariya-Zahid/YoinkTUI/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Zakariya-Zahid/YoinkTUI/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/Zakariya-Zahid/YoinkTUI/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Zakariya-Zahid/YoinkTUI/compare/v0.1.0...v0.2.0

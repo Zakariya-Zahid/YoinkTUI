@@ -1,6 +1,6 @@
 [project]
 name = "yoinktui"
-version = "1.0.0"
+version = "1.0.1"
 description = "Steam-style TUI download manager for YouTube and 1000+ sites via yt-dlp + ffmpeg"
 readme = "README.md"
 license = "MIT"
