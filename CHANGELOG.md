@@ -4,6 +4,20 @@ All notable changes to YoinkTUI are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `[ui].image_mode` / `YOINKTUI_IMAGE_MODE` to choose `auto`, `kitty`, `sixel`,
+  or `halfcell` thumbnail rendering.
+
+### Fixed
+
+- Thumbnails and the brand logo now fall back to colored half-block rendering
+  on Konsole and VTE-based terminals (GNOME Terminal, MATE, Xfce) instead of
+  trusting their kitty-graphics capability reply, which left the image area
+  blank.
+
 ## [1.0.0] — "Product" — 2026-11-04
 
 First official stable release of YoinkTUI! Adds full headless CLI automation, accessibility & help overlays, high-contrast theming, TLS impersonation, and automated GitHub Actions release publishing.

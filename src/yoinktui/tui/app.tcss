@@ -722,7 +722,7 @@ ThumbnailCard {
     border-title-color: $accent;
     border-title-style: bold;
 }
-ThumbnailCard > AutoImage {
+ThumbnailCard > .thumb-image {
     width: 100%;
     height: 100%;
 }

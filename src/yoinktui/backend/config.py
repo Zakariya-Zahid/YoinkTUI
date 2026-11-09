@@ -28,6 +28,7 @@ APP_NAME = "yoinktui"
 CONTAINERS = ("mkv", "mp4", "auto")
 AUDIO_FORMATS = ("mp3", "m4a", "opus", "flac", "best")
 MODES = ("video", "vonly", "audio")
+IMAGE_MODES = ("auto", "kitty", "sixel", "halfcell")
 
 # Browser names accepted by yt-dlp's --cookies-from-browser. Keep this in sync
 # with upstream when yt-dlp adds a browser.
@@ -119,6 +120,7 @@ class AppConfig:
     ascii: bool = False
     no_color: bool = False
     show_preview: bool = True
+    image_mode: str = "auto"
 
     # [presets.<name>] — built-ins are merged with user-defined overrides.
     presets: dict[str, Preset] = field(default_factory=builtin_presets)
@@ -176,6 +178,7 @@ _FILE_SETTERS: tuple[_Setter, ...] = (
     _Setter("ui", "ascii", "ascii", bool),
     _Setter("ui", "no_color", "no_color", bool),
     _Setter("ui", "show_preview", "show_preview", bool),
+    _Setter("ui", "image_mode", "image_mode", str),
 )
 
 _ENV_SETTERS: dict[str, tuple[str, type]] = {
@@ -200,6 +203,7 @@ _ENV_SETTERS: dict[str, tuple[str, type]] = {
     "YOINKTUI_ASCII": ("ascii", bool),
     "YOINKTUI_NO_COLOR": ("no_color", bool),
     "YOINKTUI_SHOW_PREVIEW": ("show_preview", bool),
+    "YOINKTUI_IMAGE_MODE": ("image_mode", str),
 }
 
 
@@ -457,6 +461,14 @@ def _validate(config: AppConfig, warnings: list[str], *, strict: bool) -> None:
             0,
         )
 
+    config.image_mode = config.image_mode.lower()
+    if config.image_mode not in IMAGE_MODES:
+        fallback(
+            f"image_mode must be one of {', '.join(IMAGE_MODES)}; using auto",
+            "image_mode",
+            "auto",
+        )
+
     config.rate_limit = config.rate_limit.strip()
     if config.rate_limit and not _RATE_LIMIT.fullmatch(config.rate_limit):
         fallback(
@@ -588,6 +600,7 @@ def config_to_dict(config: AppConfig) -> dict[str, Any]:
             "ascii": config.ascii,
             "no_color": config.no_color,
             "show_preview": config.show_preview,
+            "image_mode": config.image_mode,
         },
         "presets": {name: preset.to_dict() for name, preset in config.presets.items()},
     }

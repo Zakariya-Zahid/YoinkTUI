@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
+import sys
 from datetime import datetime
 from typing import TYPE_CHECKING, Self
 
@@ -23,26 +25,83 @@ from textual.widgets import (
     RichLog,
     Static,
 )
-from textual_image.widget import AutoImage
+from textual_image.widget import AutoImage, HalfcellImage, SixelImage, TGPImage
 
 from yoinktui.tui.markup import escape_markup as escape
 
 if TYPE_CHECKING:
+    from textual_image.widget._base import Image as BaseImage
+
     from yoinktui.backend.models import FormatInfo, MediaInfo
+
+
+_IMAGE_WIDGETS: dict[str, type[BaseImage]] = {
+    "kitty": TGPImage,
+    "sixel": SixelImage,
+    "halfcell": HalfcellImage,
+}
+
+
+def _terminal_image_class() -> type[BaseImage]:
+    """Choose an image renderer that actually works in this terminal.
+
+    ``textual-image``'s ``AutoImage`` trusts the terminal's capability reply.
+    Konsole and some VTE-based terminals advertise kitty graphics support but
+    do not render its placeholder cells, leaving the image area blank. Colored
+    half blocks work everywhere, so only use kitty graphics on known-good
+    terminals.
+    """
+    if not (sys.__stdout__ and sys.__stdout__.isatty()):
+        # Headless runs (tests/snapshots) keep textual-image's own fallback.
+        return AutoImage
+
+    env = os.environ
+    term = env.get("TERM", "").lower()
+    program = env.get("TERM_PROGRAM", "").lower()
+    if env.get("KITTY_WINDOW_ID") or "kitty" in term:
+        return TGPImage
+    if (
+        program in ("wezterm", "ghostty")
+        or env.get("WEZTERM_EXECUTABLE")
+        or env.get("GHOSTTY_RESOURCES_DIR")
+    ):
+        return AutoImage
+    return HalfcellImage
+
+
+def image_widget(
+    image=None,
+    *,
+    mode: str = "auto",
+    **kwargs,
+) -> BaseImage:
+    """Create an image widget using the configured/available renderer."""
+    renderer = _IMAGE_WIDGETS.get((mode or "auto").strip().lower())
+    if renderer is None:
+        renderer = _terminal_image_class()
+    return renderer(image, **kwargs)
 
 
 class ThumbnailCard(Static):
     """A card that shows the video thumbnail using the best available method.
 
-    Falls back gracefully to a styled placeholder if the terminal doesn't
-    support graphics protocols (kitty, sixel, iterm2).
+    Falls back to colored half-block rendering on terminals without a working
+    graphics protocol (Konsole, GNOME Terminal/VTE, most others).
     """
 
     image_url: reactive[str] = reactive("", init=False)
-    _img: AutoImage | None = None
+    _img: BaseImage | None = None
+
+    def __init__(self, *args, image_mode: str = "auto", **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._image_mode = image_mode
 
     def compose(self):
-        self._img = AutoImage(id="thumb", classes="hidden")
+        self._img = image_widget(
+            id="thumb",
+            classes="thumb-image hidden",
+            mode=self._image_mode,
+        )
         yield self._img
         yield Static("▶ LOADING", id="placeholder", classes="placeholder")
 

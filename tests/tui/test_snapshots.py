@@ -442,7 +442,11 @@ def test_url_screen_snapshot(
 ) -> None:
     # The real logo is a terminal-graphics image; use a plain wordmark so the
     # snapshot is independent of kitty/sixel support.
-    monkeypatch.setattr(screens, "_brand_logo", lambda: Static("YoinkTUI", classes="title"))
+    monkeypatch.setattr(
+        screens,
+        "_brand_logo",
+        lambda *args, **kwargs: Static("YoinkTUI", classes="title"),
+    )
     assert snap_compare(UrlSnapshotApp(theme=theme), terminal_size=size)
 
 

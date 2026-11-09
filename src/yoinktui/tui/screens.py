@@ -21,7 +21,6 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen, Screen
 from textual.timer import Timer
 from textual.widgets import Button, DataTable, Footer, Header, Input, Select, Static, Switch
-from textual_image.widget import AutoImage
 
 from yoinktui.backend.config import AppConfig, load_last_url, save_last_url
 from yoinktui.backend.errors import DownloadError
@@ -53,6 +52,7 @@ from yoinktui.tui.widgets import (
     UrlInput,
     human_size,
     human_time,
+    image_widget,
 )
 
 if TYPE_CHECKING:
@@ -69,7 +69,7 @@ _BANNER = (
 _LOGO_BG = (0x1A, 0x22, 0x34)
 
 
-def _brand_logo() -> AutoImage:
+def _brand_logo(mode: str = "auto"):
     """YoinkTUI wordmark for the dark UI (light-on-transparent variant).
 
     textual-image drops the alpha channel, so the transparent PNG is
@@ -80,8 +80,9 @@ def _brand_logo() -> AutoImage:
         rgba = source.convert("RGBA")
         background = PILImage.new("RGBA", rgba.size, (*_LOGO_BG, 255))
         flat = PILImage.alpha_composite(background, rgba).convert("RGB")
-    return AutoImage(
+    return image_widget(
         flat,
+        mode=mode,
         classes="logo",
         on_error=lambda _: Static(_BANNER, classes="title", markup=True),
     )
@@ -124,7 +125,7 @@ class UrlScreen(Screen):
                     yield Static(_BANNER, classes="title", markup=True)
                 else:
                     try:
-                        yield _brand_logo()
+                        yield _brand_logo(config.image_mode if config is not None else "auto")
                     except (OSError, ModuleNotFoundError):
                         yield Static(_BANNER, classes="title", markup=True)
             yield Static(
@@ -1400,12 +1401,13 @@ class FormatScreen(Screen):
         self._preset: Preset | None = None
 
     def compose(self) -> ComposeResult:
+        config = getattr(self.app, "config", AppConfig())
         yield Header(show_clock=True)
         with Container(classes="top-row"):
             with Vertical(classes="left-pane"):
                 yield FormatTable(id="table")
             with Vertical(classes="right-pane"):
-                yield ThumbnailCard(id="thumb")
+                yield ThumbnailCard(id="thumb", image_mode=config.image_mode)
                 yield InfoPanel(id="info")
         with Horizontal(classes="ActionBar"):
             yield Button("▶ Video+Audio", variant="success", id="btn_video")

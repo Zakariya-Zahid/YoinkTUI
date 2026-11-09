@@ -31,7 +31,7 @@ TUI download manager for YouTube (and 1000+ sites) via **yt-dlp** + **ffmpeg**.
   rate limit, metadata/thumbnail embedding, output directory, and defaults
 - **Trustworthy failures** — typed errors with hints, startup dependency checks,
   and a `yoinktui --doctor` pre-flight report
-- **Live thumbnail** — renders via kitty graphics / sixel / Unicode fallback (`textual-image`)
+- **Live thumbnail** — kitty graphics where supported, colored half-block fallback elsewhere (`textual-image`)
 - **Format picker** — resolution, codec, size, and bitrate at a glance; one
   format maps to one download, so the format table itself stays single-select
 - **Video + Audio / Video Only / Audio Only** modes
@@ -165,6 +165,7 @@ impersonate = ""           # client to impersonate, e.g. "chrome"
 
 [ui]
 show_preview = true
+image_mode = "auto"  # auto | kitty | sixel | halfcell
 ascii = false
 no_color = false
 
@@ -276,6 +277,28 @@ yt-dlp is updated frequently to keep up with site changes. If downloads start
 failing across many sites, update it first (`yt-dlp -U`, or
 `uv tool install --upgrade yt-dlp`).
 
+### Thumbnails and terminal images
+
+Thumbnails render with the terminal's native graphics protocol when it is
+reliable, and fall back to colored half-block art otherwise. That means images
+work in Konsole, GNOME Terminal/VTE, xterm, and similar terminals without any
+extra setup.
+
+The renderer can be forced in `[ui]` or with `YOINKTUI_IMAGE_MODE`:
+
+```toml
+[ui]
+show_preview = true
+image_mode = "auto"  # auto | kitty | sixel | halfcell
+```
+
+- `auto` — kitty graphics in Kitty/WezTerm/Ghostty, half blocks elsewhere.
+- `kitty` — force the kitty graphics protocol.
+- `sixel` — force sixel (for terminals such as foot or WezTerm).
+- `halfcell` — always use colored half blocks; the safest option.
+
+Set `show_preview = false` to hide thumbnails entirely.
+
 ### Udemy courses and lectures
 
 Udemy needs a logged-in session and usually browser impersonation. The course
@@ -344,7 +367,9 @@ docs/contracts/          # frozen progress, selection, and navigation contracts
   terminates the whole process group on cancel
 - **Failures** are classified into network/geo/auth/not-found/disk/ffmpeg/
   unsupported buckets, each with a hint and suggested next step
-- **Thumbnails** are fetched via `httpx` and rendered by `textual-image.AutoImage`
+- **Thumbnails** are fetched via `httpx` and rendered by `textual-image`; the
+  renderer is selected by `[ui].image_mode`, with a half-block fallback for
+  terminals whose graphics-protocol detection is unreliable.
 
 ## Development
 

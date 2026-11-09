@@ -31,6 +31,7 @@ def test_defaults() -> None:
     assert config.concurrent_fragments == 0
     assert config.embed_metadata is True
     assert config.merge_format == "mkv"
+    assert config.image_mode == "auto"
     assert config.download_dir == Path.home() / "Videos" / "yoinktui"
 
 
@@ -63,6 +64,7 @@ cookies_from_browser = "firefox"
 ascii = true
 no_color = true
 show_preview = false
+image_mode = "halfcell"
 """,
         encoding="utf-8",
     )
@@ -85,6 +87,7 @@ show_preview = false
     assert config.ascii is True
     assert config.no_color is True
     assert config.show_preview is False
+    assert config.image_mode == "halfcell"
     assert config.ytdlp_args[:2] == ["--cookies-from-browser", "firefox"]
 
 
@@ -170,6 +173,9 @@ container = "avi"
 audio_format = "ogg"
 rate_limit = "as fast as possible"
 concurrent_fragments = -2
+
+[ui]
+image_mode = "kitty-graphics"
 """,
         encoding="utf-8",
     )
@@ -179,6 +185,7 @@ concurrent_fragments = -2
     assert config.audio_format == "mp3"
     assert config.rate_limit == ""
     assert config.concurrent_fragments == 0
+    assert config.image_mode == "auto"
     assert config.warnings
 
 
